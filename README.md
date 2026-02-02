@@ -9,9 +9,9 @@ Tools for the generation of the SWORD Localy Expertised database for SWOT
 1. **SWORD** : SWORD Explorer(https://www.swordexplorer.com/)
 
 2. **REPLACEMENT dataset** :  BD TOPAGE [https://www.data.gouv.fr/datasets/bd-topage-r](https://www.data.gouv.fr/datasets/bd-topage-r)
-=> A manual pre‑selection step is required to choose the relevant TOPAGE reaches to use for each study area. These selected reaches will be used to correct or replace corresponding SWORD reaches inside the mask.
+=> A manual pre‑selection step is required to choose the relevant TOPAGE reaches to use for each study area. These selected reaches will be used to correct or replace corresponding SWORD reaches inside and/or outside the mask.
 
-3. **POLYGON mask** :  defining the study area is applied to filter and process the reaches
+3. **POLYGON mask** :  defining the study area is applied to filter and process the reaches.  => The polygon mask must be carefully defined. It corresponds to a vector layer that can be easily created in QGIS. This layer should cover the reaches to be corrected and be designed so that the upstream and downstream SWORD reaches intersect at a point with the corresponding replacement reaches. This ensures proper connectivity and continuity between original and replacement reaches, in accordance with the logic implemented in the [swordle.py](https://gitlab.si.c-s.fr/rs-tbx/hydro/sword-le/-/blob/CS/swordle.py?ref_type=heads)
 
 
 ## Environment & Dependencies
@@ -52,6 +52,7 @@ The pipeline is executed from the command line.
 python swordle_prod_upgrade.py \
     --mask /path/to/mask.shp \
     --sword /path/to/sword_reaches.shp \
+    --logic 2 \
     --replacement /path/to/topage_extraction.shp \
     --default-attributes /path/to/default_attributes.json \
     --results /path/to/output_folder/
@@ -61,9 +62,21 @@ python swordle_prod_upgrade.py \
 
 * `--mask` : Polygon mask defining the study area
 * `--sword` : Input SWORD reaches
+* `--logic` : Choice of the logic : find_upstream_downstream_reaches_using_mask
 * `--replacement` : reaches used to correct or replace SWORD segments
 * `--default-attributes` : JSON file with default attributes depending on the version of SWORD
 * `--results` : Output directory
+
+#### About the --logic parameter
+The pipeline includes two different algorithms for identifying the upstream and downstream SWORD reaches at the mask boundary:
+
+* Logic 1 (--logic 1)
+Uses the function: find_upstream_downstream_reaches_using_mask_logic1 
+
+* Logic 2 (--logic 2, default)
+Uses the function: find_upstream_downstream_reaches_using_mask_logic2
+
+The parameter allows to explicitly select which logic to apply depending on the study area.
 
 ---
 

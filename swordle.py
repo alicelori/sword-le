@@ -1,5 +1,4 @@
 import fiona
-#from fiona.crs import from_epsg
 from geopy.distance import distance, lonlat
 import json
 import math
@@ -11,120 +10,6 @@ import tqdm
 
 import matplotlib.pyplot as plt
 
-
-# def select_reaches_using_mask(src, mask, where='in', crs=None, verbose=True):
-#     """ Remove or keep reaches and reaches portions that are in the mask
-    
-#         Arguments
-#         ---------
-#             src : fiona.Collection
-#                 Source layer
-#             mask : shapely.geometry.Polygon
-#                 Polygon of the selection area
-#             inside : str
-#                 'in' to keep reaches and portions inside, 'out' to keep reaches and portions outside, 
-#                 'sin' to keep reaches strictly inside, 'sout' to keep reaches strictly outside
-#             verbose : bool
-#                 True for verbose mode
-    
-#         Returns
-#         -------
-#             selected_features : list
-#                 List of selected features (whole reaches or remaining portions).
-
-#     """
-    
-#     # Create emtpy list of selected features
-#     selected_features = []
-    
-#     # Set up reprojection is necessary
-#     reproject = None
-#     if crs is not None:
-        
-#         if crs != from_epsg(4326):
-            
-#             reproject = pyproj.Transformer.from_crs(crs, pyproj.CRS('EPSG:4326'), always_xy=True).transform
-    
-#     # Loop on features in source
-#     nfeaturescut = 0
-#     for feature in src:
-        
-#         # Retrieve feature geometry and reproject if needed
-#         geometry = shape(feature["geometry"])
-#         if reproject is not None:
-#             geometry = transform(reproject, geometry)
-
-#         if geometry.intersects(mask):
-
-#             # Geometry intersects the mask
-#             if where == "in":
-    
-#                 # Cut the geometry to keep inside portion (using intersection method of Shapely)
-#                 if geometry.intersection(mask) is not None:
-                    
-#                     kept_portion = {"geometry" : mapping(geometry.intersection(mask)),
-#                                     "properties" : feature["properties"]}
-#                     kept_portion["properties"]["cut"] = True
-#                     selected_features.append(kept_portion)
-#                     nfeaturescut += 1
-                    
-#             elif where == "out":
-                
-#                 # Cut the geometry to keep outside portion (using difference method of Shapely)
-#                 if geometry.difference(mask) is not None:
-
-#                     mask_boundary_intersection = geometry.intersection(mask.boundary)
-                    
-#                     # Reach is on the mask but not crossing it entirely
-#                     if mask_boundary_intersection.geom_type == "Point":
-                        
-#                         kept_portion = {"geometry" : mapping(geometry.difference(mask)),
-#                                         "properties" : feature["properties"]}
-#                         selected_features.append(kept_portion)
-#                         nfeaturescut += 1
-
-#                     # Reach crosses the mask entirely
-#                     elif mask_boundary_intersection.geom_type == "MultiPoint":
-                        
-#                         # 2 Points
-#                         if len(list(mask_boundary_intersection.geoms)) == 2:
-                            
-#                             geometry = snap(geometry, mask_boundary_intersection, tolerance = 1e-5)
-#                             splitted_geometries = split(geometry, mask_boundary_intersection)
-#                             for sp_geometry in list(splitted_geometries.geoms):
-
-#                                 #if sp_geometry.intersects(mask.interiors) == False:
-#                                 if sp_geometry.intersects(mask):
-
-#                                     kept_portion = {"geometry" : mapping(sp_geometry),
-#                                                     "properties" : feature["properties"]}
-#                                     selected_features.append(kept_portion)
-#                                     nfeaturescut += 1
-
-#                         # More than 2 Points 
-#                         else: 
-#                             raise ValueError("More than 2 intersection points between 'mask' boundary and 'src'")
-                    
-#         elif mask.covers(geometry):
-            
-#             # Geometry lies entirely inside the mask
-#             if where == "in" or where == "sin":
-            
-#                 # Keep source geometry
-#                 selected_features.append(feature)
-            
-#         else:
-            
-#             # Geometry lies entirely outside the mask
-#             if where == "out" or where == "sout":
-            
-#                 selected_features.append(feature)
-                
-#     if verbose:
-#         print("  - Selected %i portions (%i cut)" % (len(selected_features), nfeaturescut))
-                
-#     return selected_features
-    
 
 def select_reaches_using_mask(src, mask, where="in", crs=None, verbose=True):
     """ Remove or keep reaches and reaches portions that are in the mask
@@ -214,7 +99,7 @@ def select_reaches_using_mask(src, mask, where="in", crs=None, verbose=True):
                     if len(points) != 2:
                         raise ValueError("More than 2 intersection points between 'mask' boundary and 'src'")
 
-                    geometry = snap(geometry, mask_boundary_intersection, tolerance=1e-5)
+                    geometry = snap(geometry, mask_boundary_intersection, tolerance=1e-5) # in degrees => EPSG:4326
                     splitted_geometries = split(geometry, mask_boundary_intersection)
 
                     for sp_geometry in splitted_geometries.geoms:
@@ -251,69 +136,69 @@ def select_reaches_using_mask(src, mask, where="in", crs=None, verbose=True):
 
     
 
-# def find_upstream_downstream_reaches_using_mask(src_outmasked, mask, verbose=True):
+def find_upstream_downstream_reaches_using_mask_logic1(src_outmasked, mask, verbose=True):
 
-#     #TODO : 
-#     # - Selection du reach amont et aval avec 'reach id' et pas avec 'dist_out'
-#     # - Rajouter la modification du paramètre discriminant pour déterminer quel reach est en amont ou aval (2eme partie de la fonction) 
+    #TODO : 
+    # - Selection du reach amont et aval avec 'reach id' et pas avec 'dist_out'
+    # - Rajouter la modification du paramètre discriminant pour déterminer quel reach est en amont ou aval (2eme partie de la fonction) 
 
-#     """ Determines the two reaches of the source upstream and dowtream 
-#         of the mask 
-
-#         Arguments
-#         ---------
-#             src_outmasked : fiona.Collection
-#                 Reaches located outside of 'mask'
-#             mask : shapely.geometry.Polygon
-#                 Polygon of the selection area
-
-#         Returns
-#         -------
-#             src_upstream_reach : shapely.geometry.linestring.LineString
-#                 First upstream src_upstream_reach next to the 'mask'
-#             downstream_reach : shapely.geometry.linestring.LineString
-#                 First downstream src_upstream_reach next to the 'mask'
-    
-#     """ 
-
-#     # Selecting reachs touching the mask : upstream and downstream reaches 
-#     src_selected_reaches = []
-#     for feature in src_outmasked:
-        
-#         # Retrieve feature geometry 
-#         geometry = shape(feature["geometry"])
-        
-#         # Catching the two src reaches touching the mask
-#         if geometry.intersects(mask.exterior.buffer(0.001)):
-#             src_selected_reaches.append(feature)
-
-#     if verbose:
-#         print("Upstream and downstream reaches : %i reaches selected" % len(src_selected_reaches))
-
-#     # Check that there is only 2 reaches : downstream and upstream
-#     if len(src_selected_reaches) == 2:
-        
-#         src_upstream_reach, downstream_reach = None, None
-
-#         # Assigning 'downstream' or 'upstream' name to reaches according to 'dist_out' parameter
-#         if src_selected_reaches[0]['properties']['dist_out'] > src_selected_reaches[1]['properties']['dist_out']:
-#             src_upstream_reach = src_selected_reaches[0]
-#             src_downstream_reach = src_selected_reaches[1]
-        
-#         elif src_selected_reaches[0]['properties']['dist_out'] < src_selected_reaches[1]['properties']['dist_out']:
-#             src_upstream_reach = src_selected_reaches[1]
-#             src_downstream_reach = src_selected_reaches[0]
-        
-#         else:
-#             raise ValueError("'dist_out' parameter is the same for the two selected reaches.")
-
-#     else:
-#         raise ValueError("Incorrect buffer value : algorithm must select 2 reaches.")
-
-#     return src_upstream_reach, src_downstream_reach
-
-def find_upstream_downstream_reaches_using_mask(src_masked_out, mask, verbose=True):
     """ Determines the two reaches of the source upstream and dowtream 
+        of the mask 
+
+        Arguments
+        ---------
+            src_outmasked : fiona.Collection
+                Reaches located outside of 'mask'
+            mask : shapely.geometry.Polygon
+                Polygon of the selection area
+
+        Returns
+        -------
+            src_upstream_reach : shapely.geometry.linestring.LineString
+                First upstream src_upstream_reach next to the 'mask'
+            downstream_reach : shapely.geometry.linestring.LineString
+                First downstream src_upstream_reach next to the 'mask'
+    
+    """ 
+
+    # Selecting reachs touching the mask : upstream and downstream reaches 
+    src_selected_reaches = []
+    for feature in src_outmasked:
+        
+        # Retrieve feature geometry 
+        geometry = shape(feature["geometry"])
+        
+        # Catching the two src reaches touching the mask
+        if geometry.intersects(mask.exterior.buffer(0.001)):
+            src_selected_reaches.append(feature)
+
+    if verbose:
+        print("Upstream and downstream reaches : %i reaches selected" % len(src_selected_reaches))
+
+    # Check that there is only 2 reaches : downstream and upstream
+    if len(src_selected_reaches) == 2:
+        
+        src_upstream_reach, downstream_reach = None, None
+
+        # Assigning 'downstream' or 'upstream' name to reaches according to 'dist_out' parameter
+        if src_selected_reaches[0]['properties']['dist_out'] > src_selected_reaches[1]['properties']['dist_out']:
+            src_upstream_reach = src_selected_reaches[0]
+            src_downstream_reach = src_selected_reaches[1]
+        
+        elif src_selected_reaches[0]['properties']['dist_out'] < src_selected_reaches[1]['properties']['dist_out']:
+            src_upstream_reach = src_selected_reaches[1]
+            src_downstream_reach = src_selected_reaches[0]
+        
+        else:
+            raise ValueError("'dist_out' parameter is the same for the two selected reaches.")
+
+    else:
+        raise ValueError("Incorrect buffer value : algorithm must select 2 reaches.")
+
+    return src_upstream_reach, src_downstream_reach
+
+def find_upstream_downstream_reaches_using_mask_logic2(src_masked_out, mask, verbose=True):
+    """ Determines the two reaches of the source upstream and downstream 
         of the mask 
 
         Arguments
@@ -537,8 +422,8 @@ def correct_reach_using_intersection_point(rep, src_reach, intersection_point, m
     # Splitting 'src_reach' and selected rep reach with 'intersection_point'
     # A too large tolerance value interrupts code when intersection point is near the end of the line. 
     # (tol=0.1 fails for the roi "ile de la cité")
-    rep_reach_geometry = snap(rep_reach_geometry, intersection_point, tolerance = 1e-5)
-    src_reach_geometry = snap(src_reach_geometry, intersection_point, tolerance = 1e-5) 
+    rep_reach_geometry = snap(rep_reach_geometry, intersection_point, tolerance = 1e-5) # in degrees => EPSG:4326
+    src_reach_geometry = snap(src_reach_geometry, intersection_point, tolerance = 1e-5) # in degrees => EPSG:4326
 
     rep_reach_1, rep_reach_2 = split(rep_reach_geometry, intersection_point).geoms
     src_reach_1, src_reach_2 = split(src_reach_geometry, intersection_point).geoms
@@ -632,7 +517,7 @@ def adjust_reaches_with_confluence_using_mask(rep_masked_in, upstream_reach, dow
     unified_rep = unary_union([shape(feature["geometry"]) for feature in rep_masked_in])
 
     # Splitting
-    rectified_rep = snap(unified_rep, confluence_points, tolerance = 0.1)
+    rectified_rep = snap(unified_rep, confluence_points, tolerance = 0.1) # in degrees => EPSG:4326
     rectified_rep = split(unified_rep, confluence_points)
 
     # Selecting little reaches that go from confluence/defluence points to mask boundary  
@@ -646,7 +531,12 @@ def adjust_reaches_with_confluence_using_mask(rep_masked_in, upstream_reach, dow
             feature = {'geometry' : mapping(geometry), 
                        'properties' : {}}
             rectified_rep_features.append(feature)
-
+    # -----------------------------------------------------------------------
+    # If no segment touches the mask boundary, we do not correct
+    # the reaches and return the current state (avoids min(distances) on empty list)
+    if not selected_geometries:
+        return rectified_rep_features, upstream_reach, downstream_reach
+    # -----------------------------------------------------------------------
     # Correcting upstream and downstream reaches - extension to confluence/defluence points
     upstream_reach_geometry = shape(upstream_reach["geometry"])
     downstream_reach_geometry = shape(downstream_reach["geometry"])
@@ -681,8 +571,8 @@ def compute_reach_length(reach):
     
     # Retrieve geometry of the feature
     geometry = shape(reach["geometry"])
-    if geometry.type != "LineString":
-        raise RuntimeError("Cannot process geometry of type %s" % geometry.type)
+    if geometry.geom_type != "LineString":
+        raise RuntimeError("Cannot process geometry of type %s" % geometry.geom_type)
     
     # Compute length (in meters) of the linestring using geopy.distance.distance
     coords = list((geometry.coords))
@@ -691,8 +581,8 @@ def compute_reach_length(reach):
     for lon2, lat2 in coords[1:]:
         length += distance(lonlat(lon1, lat1), lonlat(lon2, lat2)).meters
         lon1, lat1 = lon2, lat2
-        
-    reach["properties"]["reach_len"] = length
+    return length       
+    #reach["properties"]["reach_len"] = length
 
 
 def add_two_reaches_connection(upstream_reach, downstream_reach):
@@ -749,8 +639,8 @@ def compute_connectivity(upstream_reach, downstream_reach, rep_reaches):
         
         # Retrieve feature endpoints
         geometry = shape(feature["geometry"])
-        if geometry.type != "LineString":
-            raise RuntimeError("Cannot process geometry of type %s" % geometry.type)
+        if geometry.geom_type != "LineString":
+            raise RuntimeError("Cannot process geometry of type %s" % geometry.geom_type)
         endpoint1 = geometry.coords[0]
         endpoint2 = geometry.coords[-1]
         
@@ -772,8 +662,8 @@ def compute_connectivity(upstream_reach, downstream_reach, rep_reaches):
 
         # Retrieve feature endpoints
         geometry = shape(feature["geometry"])
-        if geometry.type != "LineString":
-            raise RuntimeError("Cannot process geometry of type %s" % geometry.type)
+        if geometry.geom_type != "LineString":
+            raise RuntimeError("Cannot process geometry of type %s" % geometry.geom_type)
         endpoint1 = geometry.coords[0]
         endpoint2 = geometry.coords[-1]
         
@@ -913,11 +803,11 @@ def replace_node_on_reach(node, reach, verbose=True):
     
     # Retrieve geometries of the reach and the node
     reach_geometry = shape(reach["geometry"])
-    if reach_geometry.type != "LineString":
-        raise RuntimeError("Cannot process reach geometry of type %s" % reach_geometry.type)
+    if reach_geometry.geom_type != "LineString":
+        raise RuntimeError("Cannot process reach geometry of type %s" % reach_geometry.geom_type)
     node_geometry = shape(node["geometry"])
-    if node_geometry.type != "Point":
-        raise RuntimeError("Cannot process node geometry of type %s" % node_geometry.type)
+    if node_geometry.geom_type != "Point":
+        raise RuntimeError("Cannot process node geometry of type %s" % node_geometry.geom_type)
     
     # Compute the nearest point on the reach line
     dist = reach_geometry.project(node_geometry)
@@ -982,19 +872,19 @@ def create_nodes(reaches, default_attributes, spacing=200.0, verbose=True):
         # Retrieve reach id
         reach_id = feature["properties"]["reach_id"]
 
-        if geometry.type == "MultiLineString":
+        if geometry.geom_type == "MultiLineString":
             
             # Extract LineStrings of a MultiLineString object
             for index, geom in enumerate(geometry.geoms):
                 segments.append((geom, feature_index, index, reach_id))
             
-        elif geometry.type == "LineString":
+        elif geometry.geom_type == "LineString":
 
             # Store LineString
             segments.append((geometry, feature_index, 0, reach_id))
             
         else:
-            raise RuntimeError("Cannot process geometry of type %s" % geometry.type)
+            raise RuntimeError("Cannot process geometry of type %s" % geometry.geom_type)
             
     # Loop on segments to create nodes
     nodes = []

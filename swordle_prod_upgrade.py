@@ -4,6 +4,9 @@
 """
 Auteur : Abderrahmane AICHE (CS GROUP)
 Date : 23/01/2026
+''Adjusting script for new logic functions : find_upstream_downstream_reaches_using_mask''
+Update Date : 04/02/2026
+
 Version : Python  3.13
 
 Description :
@@ -140,6 +143,7 @@ def write_features(path, features, schema, crs, default_attributes):
 
 def run_pipeline(mask_path: str,
                  sword_path: str,
+                 logic: str,
                  replacement_path: str,
                  default_attr_path: str,
                  results_dir: str):
@@ -181,9 +185,15 @@ def run_pipeline(mask_path: str,
     # 2 - Ajustements aux bords du masque
     # ==========================================================================================================
     logger.info("Recherche des reaches amont/aval à corriger")
-    src_upstream_reach, src_downstream_reach = swordle.find_upstream_downstream_reaches_using_mask(
-        src_masked_out, mask
-    )
+    if logic == "1":
+        logic_func = swordle.find_upstream_downstream_reaches_using_mask_logic1
+    
+    else:
+        logic_func = swordle.find_upstream_downstream_reaches_using_mask_logic2
+    
+    logger.info(f"Utilisation de la logique {logic} pour la sélection amont/aval.")
+    
+    src_upstream_reach, src_downstream_reach = logic_func(src_masked_out, mask)   
 
     logger.info("Recherche des points d'intersection proches du masque")
     upstream_intersection_point = swordle.find_closest_intersection_point_to_the_mask(
@@ -277,6 +287,7 @@ def build_arg_parser():
     )
     p.add_argument("--mask", required=True, help="Shapefile masque (polygone)")
     p.add_argument("--sword", required=True, help="Shapefile SWORD (reaches)")
+    p.add_argument("--logic", required=False, choices=["1","2"], default="2", help="Choix de la logique pour la sélection amont/aval (1 ou 2). Défaut : 2.")
     p.add_argument("--replacement", required=True, help="Shapefile replacement (TOPAGE)")
     p.add_argument("--default-attributes", required=True, help="JSON des attributs par défaut")
     p.add_argument("--results", required=True, help="Dossier de sortie des shapefiles.")
@@ -307,6 +318,7 @@ def main():
         run_pipeline(
             mask_path=args.mask,
             sword_path=args.sword,
+            logic= args.logic,
             replacement_path=args.replacement,
             default_attr_path=args.default_attributes,
             results_dir=args.results.rstrip(os.sep) + os.sep
