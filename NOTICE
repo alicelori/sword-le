@@ -1,0 +1,46 @@
+SWORD-le Copyright (c)
+
+This software is distributed under the Apache Software License (ASL) v2.0, see
+LICENSE file or http://www.apache.org/licenses/LICENSE-2.0 for details.
+
+SWORD-le depends on or includes source code from the following third-party
+software:
+
+Python: programming language that lets you work quickly and integrate systems more effectively.
+Copyright (c) 2001-2020 Python Software Foundation. All Rights reserved.
+Website: http://python.org/
+License: Python Software License.
+
+NumPy: The fundamental package for scientific computing with Python.
+Copyright (c) 2005-2020, NumPy Developers.
+Website: https://numpy.org/
+License: BSD 3 Clause.
+
+Fiona: reads and writes geographic data files
+Copyright (c) 2007, Sean C. Gillies
+Website: https://github.com/Toblerity/Fiona
+License: BSD 3 Clause.
+
+Shapely: Manipulation and analysis of geometric objects
+Copyright (c) 2007-2022, Sean C. Gillies, Casper van der Wel and contributors.
+Website: https://github.com/Toblerity/Shapely
+License: BSD 3 Clause.
+
+tqdm: A Fast, Extensible Progress Bar for Python and CLI
+Website: https://tqdm.github.io/
+
+
+Python interface to PROJ
+Copyright (c) 2006-2018, Jeffrey Whitaker.
+Website: https://github.com/pyproj4/pyproj
+License: MIT
+
+Geopy: Python client for several popular geocoding web services
+Copyright (c) 2006-2018, Jeffrey Whitaker.
+Website: https://github.com/geopy/geopy
+License: MIT
+
+GeoPandas : open source project to make working with geospatial data
+Copyright (c) 2013-2022
+Website: https://github.com/geopandas/geopandas/
+License: BSD 3 Clause.

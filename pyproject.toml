@@ -1,0 +1,36 @@
+[project]
+name = "sword-le"
+version = "0.1.0"
+readme = "README.md"
+description = "Geospatial processing pipeline designed to industrialize the selection, correction, and merging reaches"
+authors = [ ]
+requires-python = ">=3.10"
+
+dependencies = [
+  "geopandas>=1.1.2",
+  "shapely>=2.1.2",
+  "fiona>=1.10.1",
+  "pyproj>=3.7.1",
+  "numpy>=2.2.6",
+  "pandas>=2.3.3",
+  "matplotlib>=3.10.8",
+  "tqdm>=4.67.1",
+  "geopy>=2.4.1",
+  "pytest>=8.2"
+]
+
+[project.optional-dependencies]
+dev =[
+    "black==25.1.0",
+    "isort==6.0.1",
+    "pre-commit",
+    "pylint",
+]
+packages = ["sword-le"]
+
+[project.scripts]
+"sword-le" = "sword_le.swordle_prod_upgrade:main"
+
+[build-system]
+requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
+build-backend = "setuptools.build_meta"
