@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 GeoUtils developers
+# Copyright (c) 2026 CS GROUP France
 #
 # This file is part of the sword-le project:
-#  https://github.com/.../sword-le
+#  https://github.com/csgroup-oss/sword-le
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

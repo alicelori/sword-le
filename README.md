@@ -18,7 +18,7 @@ The pipeline runs in a dedicated Conda environment defined
 * Main libraries: `geopandas`, `shapely`, `fiona`, `pyproj`, `geopy`, `matplotlib`, `tqdm`
 
 ```shell
-git clone https://github.com/your/awesome-project.git
+git clone https://github.com/csgroup-oss/sword-le
 cd sword_le/
 conda create -n sword_le_env 
 conda activate sword_le_env 
@@ -33,7 +33,7 @@ pip install . #need pyproject.toml
 ## Developing
 
 ```shell
-git clone https://github.com/your/awesome-project.git
+git clone https://github.com/csgroup-oss/sword-le
 cd sword_le/
 ```
 
@@ -128,11 +128,8 @@ License : Licence Ouverte / Open Licence version 2.0
 
 ## Links
 
-- Project homepage: https://your.github.com/awesome-project/
-- Repository: https://github.com/your/awesome-project/
-- Issue tracker: https://github.com/your/awesome-project/issues
-- Related projects:
-  - Your other project: https://github.com/your/other-project/
+- Repository: https://github.com/csgroup-oss/sword-le
+- Issue tracker: https://github.com/csgroup-oss/sword-le/issues
 
 
 ## Licensing
