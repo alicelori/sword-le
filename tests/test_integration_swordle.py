@@ -11,10 +11,10 @@ from shapely.geometry import shape
 
 from sword_le import swordle
 
-SWORD_DIR = "./data/SWORD_v17b_shp"
-MASK_PATH_RAMIER = "./data/masque_ramier/masque_ramier_polygone.shp"
+SWORD_DIR = "./tests/data/sword-le-test-data/SWORD_v17b_shp"
+MASK_PATH_RAMIER = "./tests/data/sword-le-test-data/masque_ramier/masque_ramier_polygone.shp"
 TOPAGE_EXTRACTION_PATH_RAMIER = (
-    "./data/topage_extraction_ramier/topage_extraction_ramier_4326.shp"
+    "./tests/data/sword-le-test-data/topage_extraction_ramier/topage_extraction_ramier_4326.shp"
 )
 
 
@@ -47,7 +47,7 @@ def mask():
 def default_attributes():
     """Return attribute path"""
     with open(
-        "./data/default_attributes_v17b.json", "r", encoding="utf-8"
+        "./tests/data/sword-le-test-data/default_attributes_v17b.json", "r", encoding="utf-8"
     ) as fin:
         default_attributes = json.load(fin)
     return default_attributes
@@ -57,7 +57,7 @@ def default_attributes():
 def src_masked_out():
     """Return sword reaches outside using mask"""
     with fiona.Collection(
-        "./data/out_logic1/test_src_masked_out.shp", "r"
+        "./tests/data/sword-le-test-data/out_logic1/test_src_masked_out.shp", "r"
     ) as collection:
         yield collection
 
@@ -66,7 +66,7 @@ def src_masked_out():
 def rep_masked_out():
     """Return topage reaches outside using mask"""
     with fiona.Collection(
-        "./data/out_logic1/test_rep_masked_out.shp", "r"
+        "./tests/data/sword-le-test-data/out_logic1/test_rep_masked_out.shp", "r"
     ) as collection:
         yield collection
 
@@ -75,7 +75,7 @@ def rep_masked_out():
 def rep_masked_in():
     """Return topage reaches inside using mask"""
     with fiona.Collection(
-        "./data/out_logic1/test_rep_masked_in.shp", "r"
+        "./tests/data/sword-le-test-data/out_logic1/test_rep_masked_in.shp", "r"
     ) as collection:
         yield collection
 
@@ -84,7 +84,7 @@ def rep_masked_in():
 def src_upstream_reach1():
     """Return sword reach upstream with logic1"""
     with fiona.Collection(
-        "./data/out_logic1/test_src_up_reach.shp", "r"
+        "./tests/data/sword-le-test-data/out_logic1/test_src_up_reach.shp", "r"
     ) as collection:
         yield collection
 
@@ -93,7 +93,7 @@ def src_upstream_reach1():
 def src_downstream_reach1():
     """Return sword downstream reach with logic1"""
     with fiona.Collection(
-        "./data/out_logic1/test_src_dw_reach.shp", "r"
+        "./tests/data/sword-le-test-data/out_logic1/test_src_dw_reach.shp", "r"
     ) as collection:
         yield collection
 
@@ -102,7 +102,7 @@ def src_downstream_reach1():
 def src_upstream_reach2():
     """Return sword upstream reach with logic2"""
     with fiona.Collection(
-        "./data/out_logic2/test_src_up_reach.shp", "r"
+        "./tests/data/sword-le-test-data/out_logic2/test_src_up_reach.shp", "r"
     ) as collection:
         yield collection
 
@@ -111,7 +111,7 @@ def src_upstream_reach2():
 def src_downstream_reach2():
     """Return sword downstream reach with logic1"""
     with fiona.Collection(
-        "./data/out_logic2/test_src_dw_reach.shp", "r"
+        "./tests/data/sword-le-test-data/out_logic2/test_src_dw_reach.shp", "r"
     ) as collection:
         yield collection
 
@@ -120,7 +120,7 @@ def src_downstream_reach2():
 def intersection_points():
     """Return intersection point with the mask"""
     with fiona.Collection(
-        "./data/out_logic1/test_points.shp", "r"
+        "./tests/data/sword-le-test-data/out_logic1/test_points.shp", "r"
     ) as collection:
         yield collection
 
@@ -129,7 +129,7 @@ def intersection_points():
 def new_upstream_reach():
     """Return new upstream reach"""
     with fiona.Collection(
-        "./data/out_logic1/test_new_up_reach.shp", "r"
+        "./tests/data/sword-le-test-data/out_logic1/test_new_up_reach.shp", "r"
     ) as collection:
         yield collection
 
@@ -138,7 +138,7 @@ def new_upstream_reach():
 def new_downstream_reach():
     """Return new downstream reach"""
     with fiona.Collection(
-        "./data/out_logic1/test_new_dw_reach.shp", "r"
+        "./tests/data/sword-le-test-data/out_logic1/test_new_dw_reach.shp", "r"
     ) as collection:
         yield collection
 

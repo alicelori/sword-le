@@ -28,7 +28,7 @@ License: BSD 3 Clause.
 
 tqdm: A Fast, Extensible Progress Bar for Python and CLI
 Website: https://tqdm.github.io/
-
+License: tqdm license is unclear : https://github.com/tqdm/tqdm/issues/1603
 
 Python interface to PROJ
 Copyright (c) 2006-2018, Jeffrey Whitaker.

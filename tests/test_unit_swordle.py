@@ -11,10 +11,10 @@ from shapely.geometry import Point, shape
 
 from sword_le import swordle
 
-SWORD_DIR = "./data/SWORD_v17b_shp"
-MASK_PATH_RAMIER = "./data/masque_ramier/masque_ramier_polygone.shp"
+SWORD_DIR = "./tests/data/sword-le-test-data/SWORD_v17b_shp"
+MASK_PATH_RAMIER = "./tests/data/sword-le-test-data/masque_ramier/masque_ramier_polygone.shp"
 TOPAGE_EXTRACTION_PATH_RAMIER = (
-    "./data/topage_extraction_ramier/topage_extraction_ramier_4326.shp"
+    "./tests/data/sword-le-test-data/topage_extraction_ramier/topage_extraction_ramier_4326.shp"
 )
 
 
@@ -45,7 +45,7 @@ def mask():
 def default_attributes():
     """Return attribute path"""
     with open(
-        ".data/default_attributes_v17b.json", "r", encoding="utf-8"
+        "./tests/data/sword-le-test-data/default_attributes_v17b.json", "r", encoding="utf-8"
     ) as fin:
         default_attributes_json = json.load(fin)
     return default_attributes_json
