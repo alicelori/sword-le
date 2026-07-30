@@ -143,7 +143,8 @@ pytest -vv -s tests/
 - Issue tracker: https://github.com/csgroup-oss/sword-le/issues
 
 
-## Licensing
+## Copyright & Licensing
 
-This project is licensed under the Apache License 2.0.
-https://github.com/csgroup-oss/sword-le/LICENSE.txt
+Copyright 2026, CS GROUP
+
+This project is licensed under the Apache License 2.0. The full text of the license is available in the [LICENSE.txt](LICENSE.txt) file.
