@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # Copyright (c) 2026 CS GROUP France
 #
 # This file is part of the sword-le project:
@@ -46,10 +45,10 @@ import json
 import logging
 import os
 import sys
-
+from pathlib import Path
 import fiona
-from shapely.geometry import mapping, shape
-
+from shapely.geometry import mapping, shape, box
+import geopandas as gpd
 from sword_le import swordle
 
 # ========================================================================================
@@ -59,21 +58,33 @@ from sword_le import swordle
 
 def ensure_dir(path: str):
     """Create dir"""
-    if path and not os.path.isdir(path):
-        os.makedirs(path, exist_ok=True)
+    if path and not Path(path).is_dir():
+        Path(path).mkdir(parents=True, exist_ok=True)
 
 
-def load_first_geometry(shp_path: str):
-    """Load the first feature geometry from a shapefile (ex: polygon mask)."""
-    with fiona.open(shp_path, "r") as src:
-        for feat in src:
-            return shape(feat["geometry"])
-    raise ValueError(f"No geometry found in {shp_path}")
+def load_first_geometry(replacement_path: str, margin=0.001):
+    """
+    Load a reduced bounding box.
+
+    margin is removed from each side.
+    """
+
+    with fiona.open(replacement_path, "r") as src:
+        xmin, ymin, xmax, ymax = src.bounds
+
+    bbox = box(
+        xmin,
+        ymin,
+        xmax,
+        ymax,
+    )
+
+    return bbox
 
 
 def read_default_attributes(json_path: str) -> dict:
     """Read default attributes."""
-    with open(json_path, "r", encoding="utf-8") as fin:
+    with open(json_path, encoding="utf-8") as fin:
         return json.load(fin)
 
 
@@ -150,9 +161,7 @@ def _geom_equals(a, b, tol: float = 0.0) -> bool:
 def write_features(path, features, schema, crs, default_attributes):
     """Write a list of features to a shapefile according to a given schema/CRS."""
     ensure_dir(os.path.dirname(path))
-    with fiona.open(
-        path, "w", driver="ESRI Shapefile", crs=crs, schema=schema
-    ) as fout:
+    with fiona.open(path, "w", driver="ESRI Shapefile", crs=crs, schema=schema) as fout:
         for feature in features:
             fout.write(adapt_feature(feature, schema, default_attributes))
 
@@ -163,7 +172,6 @@ def write_features(path, features, schema, crs, default_attributes):
 
 
 def run_pipeline(
-    mask_path: str,
     sword_path: str,
     logic: str,
     replacement_path: str,
@@ -177,10 +185,6 @@ def run_pipeline(
     ensure_dir(results_dir)
     logger.info("Result dir: %s", results_dir)
 
-    # Load data
-    logger.info("Loading mask: %s", mask_path)
-    mask = load_first_geometry(mask_path)
-
     logger.info("Loading source (SWORD reaches): %s", sword_path)
     src = fiona.open(sword_path, "r")
 
@@ -189,215 +193,71 @@ def run_pipeline(
     logger.info("Element replacement: %d", len(rep))
 
     logger.info("Loading default attributes: %s", default_attr_path)
-    default_attributes = read_default_attributes(default_attr_path)
-
-    # ========================================================================================
-    # 1 - Selection via mask
-    # ========================================================================================
-    logger.info("Selection of reaches outside the mask on the source (SWORD)")
-    src_masked_out = swordle.select_reaches_using_mask(src, mask, where="out")
-
-    logger.info("Selection in/out on the replacement layer (TOPAGE)")
-    rep_masked_in = swordle.select_reaches_using_mask(
-        rep, mask, where="in", crs=rep.crs
+    _ = read_default_attributes(default_attr_path)
+    intersected_reaches = swordle.find_intersected_reaches(
+        src,
+        rep,
     )
-    rep_masked_out = swordle.select_reaches_using_mask(
-        rep, mask, where="out", crs=rep.crs
+    (
+        upstream_reach,
+        downstream_reach,
+    ) = swordle.find_upstream_downstream_reaches(
+        intersected_reaches,
     )
-
-    logger.info("Apply default attributes on the replacement layer (in/out)")
-    rep_masked_in = swordle.apply_default_attributes(
-        rep_masked_in, default_attributes
-    )
-    rep_masked_out = swordle.apply_default_attributes(
-        rep_masked_out, default_attributes
+    upstream_intersection_point = swordle.find_upstream_intersection_point(
+        upstream_reach,
+        rep,
     )
 
-    # ========================================================================================
-    # 2 - Adjustment to mask boundaries
-    # ========================================================================================
-    logger.info("Search for upstream/downstream reaches to be corrected")
-    if logic == "1":
-        logic_func = swordle.find_upstream_downstream_reaches_using_mask_logic1
-
-    else:
-        logic_func = swordle.find_upstream_downstream_reaches_using_mask_logic2
-
-    logger.info("Use of %s logic for upstream/downstream selection.", logic)
-
-    src_upstream_reach, src_downstream_reach = logic_func(src_masked_out, mask)
-
-    logger.info("Search intersection points near mask")
-    upstream_intersection_point = (
-        swordle.find_closest_intersection_point_to_the_mask(
-            rep_masked_out, src_upstream_reach, mask
-        )
-    )
-    downstream_intersection_point = (
-        swordle.find_closest_intersection_point_to_the_mask(
-            rep_masked_out, src_downstream_reach, mask
-        )
+    downstream_intersection_point = swordle.find_downstream_intersection_point(
+        downstream_reach,
+        rep,
     )
 
-    logger.info("Correct upstream/downstream reaches with intersection points")
-    upstream_reach = swordle.correct_reach_using_intersection_point(
-        rep=rep_masked_out,
-        src_reach=src_upstream_reach,
-        intersection_point=upstream_intersection_point,
-        mask=mask,
-    )
-    downstream_reach = swordle.correct_reach_using_intersection_point(
-        rep=rep_masked_out,
-        src_reach=src_downstream_reach,
-        intersection_point=downstream_intersection_point,
-        mask=mask,
+    upstream_part = swordle.keep_upstream_part(
+        upstream_reach,
+        upstream_intersection_point,
     )
 
-    # ========================================================================================
-    # 3 - Adjustment of replacement reaches inside the mask (confluences)
-    # ========================================================================================
-    logger.info(
-        "Adjustment of replacement reaches inside the mask (confluences)"
-    )
-    rectified_rep_features, upstream_reach, downstream_reach = (
-        swordle.adjust_reaches_with_confluence_using_mask(
-            rep_masked_in, upstream_reach, downstream_reach, mask
-        )
+    downstream_part = swordle.keep_downstream_part(
+        downstream_reach,
+        downstream_intersection_point,
     )
 
-    # Default attributes on final objects
-    rectified_rep_features = swordle.apply_default_attributes(
-        rectified_rep_features, default_attributes
-    )
-    upstream_reach["properties"] = default_attributes
-    downstream_reach["properties"] = default_attributes
-
-    # ========================================================================================
-    # 4 - Save
-    # ========================================================================================
-    logger.info("Writting output shapefiles")
-
-    # We use the source schema/CRS as a basis for standardization
-    src_schema = src.schema
-    src_crs = src.crs
-
-    # Selection files
-    write_features(
-        os.path.join(results_dir, "test_rep_masked_out.shp"),
-        rep_masked_out,
-        src_schema,
-        src_crs,
-        default_attributes,
-    )
-    write_features(
-        os.path.join(results_dir, "test_rep_masked_in.shp"),
-        rep_masked_in,
-        src_schema,
-        src_crs,
-        default_attributes,
-    )
-    write_features(
-        os.path.join(results_dir, "test_src_masked_out.shp"),
-        src_masked_out,
-        src_schema,
-        src_crs,
-        default_attributes,
+    replacement_part = swordle.trim_replacement_between_points(
+        rep,
+        upstream_intersection_point,
+        downstream_intersection_point,
     )
 
-    # Intersection points
-    points_schema = {"geometry": "Point", "properties": {}}
-    with fiona.open(
-        os.path.join(results_dir, "test_points.shp"),
-        "w",
-        driver="ESRI Shapefile",
-        crs=src_crs,
-        schema=points_schema,
-    ) as fout:
-        fout.write(
-            {"geometry": mapping(upstream_intersection_point), "properties": {}}
-        )
-        fout.write(
-            {
-                "geometry": mapping(downstream_intersection_point),
-                "properties": {},
-            }
-        )
-
-    # Individuals reaches
-    write_features(
-        os.path.join(results_dir, "test_src_up_reach.shp"),
-        [src_upstream_reach],
-        src_schema,
-        src_crs,
-        default_attributes,
+    replacement_part = swordle.insert_pivot_points(
+        replacement_part,
+        upstream_intersection_point,
+        downstream_intersection_point,
     )
-    write_features(
-        os.path.join(results_dir, "test_src_dw_reach.shp"),
-        [src_downstream_reach],
-        src_schema,
-        src_crs,
-        default_attributes,
-    )
-    write_features(
-        os.path.join(results_dir, "test_rep_keeped.shp"),
-        rectified_rep_features,
-        src_schema,
-        src_crs,
-        default_attributes,
+    final_geometry = swordle.build_corrected_network(
+        upstream_part,
+        replacement_part,
+        downstream_part,
     )
 
-    # Source reaches kept (excluding upstream/downstream)
-    src_keeped = [
-        f
-        for f in src_masked_out
-        if not (
-            _geom_equals(f, src_upstream_reach)
-            or _geom_equals(f, src_downstream_reach)
-        )
-    ]
-    write_features(
-        os.path.join(results_dir, "test_src_keeped.shp"),
-        src_keeped,
-        src_schema,
-        src_crs,
-        default_attributes,
+    segments = swordle.split_at_nodes(
+        final_geometry,
+        tolerance=1e-5,
+    )
+    segments, pivot_nodes = swordle.merge_non_pivot_segments(segments)
+    segments = swordle.explode_lines(segments)
+
+    gdf = gpd.GeoDataFrame(
+        {"id": range(len(segments))},
+        geometry=segments,
+        crs="EPSG:4326",
     )
 
-    # Corrected reaches
-    write_features(
-        os.path.join(results_dir, "test_new_up_reach.shp"),
-        [upstream_reach],
-        src_schema,
-        src_crs,
-        default_attributes,
+    gdf.to_file(
+        Path(results_dir) / "final_geometry.gpkg",
+        driver="GPKG",
     )
-    write_features(
-        os.path.join(results_dir, "test_new_dw_reach.shp"),
-        [downstream_reach],
-        src_schema,
-        src_crs,
-        default_attributes,
-    )
-
-    # Complete shapefile
-    complete_path = os.path.join(results_dir, "test_complete.shp")
-    with fiona.open(
-        complete_path,
-        "w",
-        driver="ESRI Shapefile",
-        crs=src_crs,
-        schema=src_schema,
-    ) as fout:
-        fout.write(
-            adapt_feature(upstream_reach, src_schema, default_attributes)
-        )
-        fout.write(
-            adapt_feature(downstream_reach, src_schema, default_attributes)
-        )
-        for feature in src_keeped:
-            fout.write(adapt_feature(feature, src_schema, default_attributes))
-        for feature in rectified_rep_features:
-            fout.write(adapt_feature(feature, src_schema, default_attributes))
 
     logger.info(
         "Processing completed successfully => Results generated in the directory : %s",
@@ -410,7 +270,6 @@ def build_arg_parser():
     p = argparse.ArgumentParser(
         description="SWORDLE pipeline (Selection, SWORD correction, and shapefile export)"
     )
-    p.add_argument("--mask", required=True, help="Shapefile mask (polygone)")
     p.add_argument("--sword", required=True, help="Shapefile SWORD (reaches)")
     p.add_argument(
         "--logic",
@@ -427,9 +286,7 @@ def build_arg_parser():
         required=True,
         help="JSON default attributes",
     )
-    p.add_argument(
-        "--results", required=True, help="Output folder for shapefiles."
-    )
+    p.add_argument("--results", required=True, help="Output folder for shapefiles.")
     p.add_argument(
         "--log-level",
         default="INFO",
@@ -448,21 +305,17 @@ def main():
     )
 
     # Check paths
-    for label, path in [
-        ("mask", args.mask),
+    for label, path in (
         ("sword", args.sword),
         ("replacement", args.replacement),
         ("default-attributes", args.default_attributes),
-    ]:
-        if not os.path.exists(path):
-            logging.error(
-                "The specified path for --%s doesn't exist : %s", label, path
-            )
+    ):
+        if not Path(path).exists():
+            logging.error("The specified path for --%s doesn't exist : %s", label, path)
             sys.exit(1)
 
     try:
         run_pipeline(
-            mask_path=args.mask,
             sword_path=args.sword,
             logic=args.logic,
             replacement_path=args.replacement,

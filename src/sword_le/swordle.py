@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # Copyright (c) CS GROUP 2026
 #
 # This file is part of the sword-le project:
@@ -22,12 +21,13 @@
 
 import logging
 import math
+from collections import Counter
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pyproj
 from geopy.distance import distance, lonlat
-from shapely.geometry import MultiLineString, Point, mapping, shape
+from shapely.geometry import MultiLineString, MultiPoint, Point, mapping, shape
 from shapely.ops import linemerge, snap, split, transform, unary_union
 
 logger = logging.getLogger("swordle")
@@ -70,17 +70,14 @@ def select_reaches_using_mask(src, mask, where="in", crs=None):
     # Loop on features in source
     nfeaturescut = 0
     for feature in src:
-
         # Retrieve feature geometry and reproject if needed
         geometry = shape(feature["geometry"])
         if reproject is not None:
             geometry = transform(reproject, geometry)
 
         if geometry.intersects(mask):
-
             # Geometry intersects the mask
             if where == "in":
-
                 # Cut the geometry to keep inside portion (using intersection method of Shapely)
                 inside_part = geometry.intersection(mask)
                 if not inside_part.is_empty:
@@ -94,14 +91,11 @@ def select_reaches_using_mask(src, mask, where="in", crs=None):
 
             # Keep outside portion
             elif where == "out":
-
                 outside_part = geometry.difference(mask)
                 if outside_part.is_empty:
                     continue
 
-                mask_boundary_intersection = geometry.intersection(
-                    mask.boundary
-                )
+                mask_boundary_intersection = geometry.intersection(mask.boundary)
 
                 # Touches boundary at one point only
                 if mask_boundary_intersection.geom_type == "Point":
@@ -114,7 +108,6 @@ def select_reaches_using_mask(src, mask, where="in", crs=None):
 
                 # Reach crosses the mask entirely
                 elif mask_boundary_intersection.geom_type == "MultiPoint":
-
                     points = list(mask_boundary_intersection.geoms)
                     if len(points) != 2:
                         raise ValueError(
@@ -124,9 +117,7 @@ def select_reaches_using_mask(src, mask, where="in", crs=None):
                     geometry = snap(
                         geometry, mask_boundary_intersection, tolerance=1e-5
                     )  # in degrees => EPSG:4326
-                    splitted_geometries = split(
-                        geometry, mask_boundary_intersection
-                    )
+                    splitted_geometries = split(geometry, mask_boundary_intersection)
 
                     for sp_geometry in splitted_geometries.geoms:
                         # Correct condition: keep ONLY parts outside the mask
@@ -139,18 +130,14 @@ def select_reaches_using_mask(src, mask, where="in", crs=None):
                             nfeaturescut += 1
 
         elif mask.covers(geometry):
-
             # Geometry lies entirely inside the mask
             if where in ("in", "sin"):
-
                 # Keep source geometry
                 selected_features.append(feature)
 
         else:
-
             # Geometry lies entirely outside the mask
             if where in ("out", "sout"):
-
                 selected_features.append(feature)
 
     logger.info(
@@ -185,7 +172,6 @@ def find_upstream_downstream_reaches_using_mask_logic1(src_outmasked, mask):
     # Selecting reachs touching the mask : upstream and downstream reaches
     src_selected_reaches = []
     for feature in src_outmasked:
-
         # Retrieve feature geometry
         geometry = shape(feature["geometry"])
 
@@ -200,7 +186,6 @@ def find_upstream_downstream_reaches_using_mask_logic1(src_outmasked, mask):
 
     # Check that there is only 2 reaches : downstream and upstream
     if len(src_selected_reaches) == 2:
-
         src_upstream_reach, _ = (
             None,
             None,
@@ -227,9 +212,7 @@ def find_upstream_downstream_reaches_using_mask_logic1(src_outmasked, mask):
             )
 
     else:
-        raise ValueError(
-            "Incorrect buffer value : algorithm must select 2 reaches."
-        )
+        raise ValueError("Incorrect buffer value : algorithm must select 2 reaches.")
 
     return src_upstream_reach, src_downstream_reach
 
@@ -284,17 +267,13 @@ def find_upstream_downstream_reaches_using_mask_logic2(src_masked_out, mask):
     # Finding which reach is upstream or downstream between reach_1 and reach_2
     if shape(reach_1["geometry"]).distance(
         shape(far_upstream_reach["geometry"])
-    ) < shape(reach_2["geometry"]).distance(
-        shape(far_upstream_reach["geometry"])
-    ):
+    ) < shape(reach_2["geometry"]).distance(shape(far_upstream_reach["geometry"])):
         upstream_reach = reach_1
         downstream_reach = reach_2
 
     elif shape(reach_1["geometry"]).distance(
         shape(far_upstream_reach["geometry"])
-    ) > shape(reach_2["geometry"]).distance(
-        shape(far_upstream_reach["geometry"])
-    ):
+    ) > shape(reach_2["geometry"]).distance(shape(far_upstream_reach["geometry"])):
         upstream_reach = reach_2
         downstream_reach = reach_1
 
@@ -325,10 +304,8 @@ def get_number_of_reaches_connected_to_mask(src, mask):
     n_src_reaches = 0
 
     for feature in src:
-
         geometry = shape(feature["geometry"])
         if geometry.intersects(mask.boundary):
-
             intersection = geometry.intersection(mask.boundary)
             logger.info("> geometry is %s", geometry.geom_type)
             logger.info("> mask boundary is %s", mask.boundary.geom_type)
@@ -376,14 +353,11 @@ def get_matching_src_rep_reaches_using_mask(src, rep, mask, n_src_reaches):
     sorted_distances = sorted(reaches_dist_to_mask.keys())
 
     for index in range(n_src_reaches):
-
         # Source feature connected to mask boundary
         src_feature = reaches_dist_to_mask[sorted_distances[index]]
 
         rep_distances = [
-            shape(rep_feature["geometry"]).distance(
-                shape(src_feature["geometry"])
-            )
+            shape(rep_feature["geometry"]).distance(shape(src_feature["geometry"]))
             for rep_feature in rep
         ]
         src_rep_distances_dict = dict(zip(rep_distances, rep))
@@ -395,9 +369,7 @@ def get_matching_src_rep_reaches_using_mask(src, rep, mask, n_src_reaches):
     return pairs
 
 
-def find_closest_intersection_point_to_the_mask(
-    rep_masked_out, src_reach, mask
-):
+def find_closest_intersection_point_to_the_mask(rep_masked_out, src_reach, mask):
     """Gives the closest intersection point to the mask between 'src_reach' and 'rep_masked_out'
 
     Arguments
@@ -420,7 +392,6 @@ def find_closest_intersection_point_to_the_mask(
     intersection = None
 
     for feature in rep_masked_out:
-
         if shape(src_reach["geometry"]).intersects(shape(feature["geometry"])):
             intersection = shape(src_reach["geometry"]).intersection(
                 shape(feature["geometry"])
@@ -445,9 +416,7 @@ def find_closest_intersection_point_to_the_mask(
     return intersection_point
 
 
-def correct_reach_using_intersection_point(
-    rep, src_reach, intersection_point, mask
-):
+def correct_reach_using_intersection_point(rep, src_reach, intersection_point, mask):
     """Corrects 'src_reach' to fit 'rep' data at the edge of the mask
 
     Arguments
@@ -488,23 +457,19 @@ def correct_reach_using_intersection_point(
         src_reach_geometry, intersection_point, tolerance=1e-5
     )  # in degrees => EPSG:4326
 
-    rep_reach_1, rep_reach_2 = split(
-        rep_reach_geometry, intersection_point
-    ).geoms
-    src_reach_1, src_reach_2 = split(
-        src_reach_geometry, intersection_point
-    ).geoms
+    rep_reach_1, rep_reach_2 = split(rep_reach_geometry, intersection_point).geoms
+    src_reach_1, src_reach_2 = split(src_reach_geometry, intersection_point).geoms
 
     # Computing the new reach geometry as sum of :
     # - rep reach part that is close to the mask
     # - src reach part that is far from the mask
     rep_distances = [
-        r.centroid.distance(mask.centroid) for r in [rep_reach_1, rep_reach_2]
+        r.centroid.distance(mask.centroid) for r in (rep_reach_1, rep_reach_2)
     ]
     rep_dict = dict(zip(rep_distances, [rep_reach_1, rep_reach_2]))
 
     src_distances = [
-        s.centroid.distance(mask.centroid) for s in [src_reach_1, src_reach_2]
+        s.centroid.distance(mask.centroid) for s in (src_reach_1, src_reach_2)
     ]
     src_dict = dict(zip(src_distances, [src_reach_1, src_reach_2]))
 
@@ -576,12 +541,10 @@ def adjust_reaches_with_confluence_using_mask(
 
     # Looping on pairs of reaches,
     for feature in rep_masked_in:
-
         sub_list.remove(feature)
         geometry = shape(feature["geometry"])
 
         for element in sub_list:
-
             inter = geometry.intersection(shape(element["geometry"]))
 
             if inter.geom_type == "MultiPoint":
@@ -589,9 +552,7 @@ def adjust_reaches_with_confluence_using_mask(
 
     # Getting mergedd features for splitting
     confluence_points = unary_union(intersections)
-    unified_rep = unary_union(
-        [shape(feature["geometry"]) for feature in rep_masked_in]
-    )
+    unified_rep = unary_union([shape(feature["geometry"]) for feature in rep_masked_in])
 
     rectified_rep = split(unified_rep, confluence_points)
 
@@ -615,7 +576,7 @@ def adjust_reaches_with_confluence_using_mask(
     upstream_reach_geometry = shape(upstream_reach["geometry"])
     downstream_reach_geometry = shape(downstream_reach["geometry"])
 
-    for reach_geometry in [upstream_reach_geometry, downstream_reach_geometry]:
+    for reach_geometry in (upstream_reach_geometry, downstream_reach_geometry):
         distances = [f.distance(reach_geometry) for f in selected_geometries]
         selected_geometries_dict = dict(zip(distances, selected_geometries))
 
@@ -632,9 +593,7 @@ def adjust_reaches_with_confluence_using_mask(
             new_downstream_reach_geometry = reach_geometry.union(
                 selected_geometries_dict[min(distances)]
             )
-            new_downstream_reach_geometry = linemerge(
-                new_downstream_reach_geometry
-            )
+            new_downstream_reach_geometry = linemerge(new_downstream_reach_geometry)
             downstream_reach = {
                 "geometry": mapping(new_downstream_reach_geometry),
                 "properties": {},
@@ -656,12 +615,10 @@ def compute_reach_length(reach):
     # Retrieve geometry of the feature
     geometry = shape(reach["geometry"])
     if geometry.geom_type != "LineString":
-        raise RuntimeError(
-            f"Cannot process geometry of type {geometry.geom_type}"
-        )
+        raise RuntimeError(f"Cannot process geometry of type {geometry.geom_type}")
 
     # Compute length (in meters) of the linestring using geopy.distance.distance
-    coords = list((geometry.coords))
+    coords = list(geometry.coords)
     lon1, lat1 = coords[0]
     length = 0.0
     for lon2, lat2 in coords[1:]:
@@ -689,28 +646,28 @@ def add_two_reaches_connection(upstream_reach, downstream_reach):
     # Update connectivity attributes for upstream reach
     if upstream_reach["properties"]["n_rch_dn"] <= 0:
         upstream_reach["properties"]["n_rch_dn"] = 1
-        upstream_reach["properties"]["rch_id_dn"] = downstream_reach[
-            "properties"
-        ]["reach_id"]
+        upstream_reach["properties"]["rch_id_dn"] = downstream_reach["properties"][
+            "reach_id"
+        ]
     else:
         upstream_reach["properties"]["n_rch_dn"] += 1
         old_list = upstream_reach["properties"]["rch_id_dn"]
-        upstream_reach["properties"][
-            "rch_id_dn"
-        ] = f"{old_list} {downstream_reach['properties']['reach_id']}"
+        upstream_reach["properties"]["rch_id_dn"] = (
+            f"{old_list} {downstream_reach['properties']['reach_id']}"
+        )
 
     # Update connectivity attributes for downstream reach
     if downstream_reach["properties"]["n_rch_up"] <= 0:
         downstream_reach["properties"]["n_rch_up"] = 1
-        downstream_reach["properties"]["rch_id_up"] = upstream_reach[
-            "properties"
-        ]["reach_id"]
+        downstream_reach["properties"]["rch_id_up"] = upstream_reach["properties"][
+            "reach_id"
+        ]
     else:
         downstream_reach["properties"]["n_rch_up"] += 1
         old_list = downstream_reach["properties"]["rch_id_up"]
-        downstream_reach["properties"][
-            "rch_id_up"
-        ] = f"{old_list} {upstream_reach['properties']['reach_id']}"
+        downstream_reach["properties"]["rch_id_up"] = (
+            f"{old_list} {upstream_reach['properties']['reach_id']}"
+        )
 
 
 def compute_connectivity(upstream_reach, downstream_reach, rep_reaches):
@@ -731,29 +688,18 @@ def compute_connectivity(upstream_reach, downstream_reach, rep_reaches):
     upstream_endpoint1 = geometry.coords[0]
     upstream_endpoint2 = geometry.coords[-1]
     for feature in rep_reaches:
-
         # Retrieve feature endpoints
         geometry = shape(feature["geometry"])
         if geometry.geom_type != "LineString":
-            raise RuntimeError(
-                f"Cannot process geometry of type {geometry.geom_type}"
-            )
+            raise RuntimeError(f"Cannot process geometry of type {geometry.geom_type}")
         endpoint1 = geometry.coords[0]
         endpoint2 = geometry.coords[-1]
 
         # Compute every possible distance between endpoints
-        dist11 = distance(
-            lonlat(*endpoint1), lonlat(*upstream_endpoint1)
-        ).meters
-        dist12 = distance(
-            lonlat(*endpoint1), lonlat(*upstream_endpoint2)
-        ).meters
-        dist21 = distance(
-            lonlat(*endpoint2), lonlat(*upstream_endpoint1)
-        ).meters
-        dist22 = distance(
-            lonlat(*endpoint2), lonlat(*upstream_endpoint2)
-        ).meters
+        dist11 = distance(lonlat(*endpoint1), lonlat(*upstream_endpoint1)).meters
+        dist12 = distance(lonlat(*endpoint1), lonlat(*upstream_endpoint2)).meters
+        dist21 = distance(lonlat(*endpoint2), lonlat(*upstream_endpoint1)).meters
+        dist22 = distance(lonlat(*endpoint2), lonlat(*upstream_endpoint2)).meters
 
         # Add connection if the minimum of every possible distance is less than 30m
         if np.min([dist11, dist12, dist21, dist22]) <= 30.0:
@@ -764,29 +710,18 @@ def compute_connectivity(upstream_reach, downstream_reach, rep_reaches):
     downstream_endpoint1 = geometry.coords[0]
     downstream_endpoint2 = geometry.coords[-1]
     for feature in rep_reaches:
-
         # Retrieve feature endpoints
         geometry = shape(feature["geometry"])
         if geometry.geom_type != "LineString":
-            raise RuntimeError(
-                f"Cannot process geometry of type {geometry.geom_type}"
-            )
+            raise RuntimeError(f"Cannot process geometry of type {geometry.geom_type}")
         endpoint1 = geometry.coords[0]
         endpoint2 = geometry.coords[-1]
 
         # Compute every possible distance between endpoints
-        dist11 = distance(
-            lonlat(*endpoint1), lonlat(*downstream_endpoint1)
-        ).meters
-        dist12 = distance(
-            lonlat(*endpoint1), lonlat(*downstream_endpoint2)
-        ).meters
-        dist21 = distance(
-            lonlat(*endpoint2), lonlat(*downstream_endpoint1)
-        ).meters
-        dist22 = distance(
-            lonlat(*endpoint2), lonlat(*downstream_endpoint2)
-        ).meters
+        dist11 = distance(lonlat(*endpoint1), lonlat(*downstream_endpoint1)).meters
+        dist12 = distance(lonlat(*endpoint1), lonlat(*downstream_endpoint2)).meters
+        dist21 = distance(lonlat(*endpoint2), lonlat(*downstream_endpoint1)).meters
+        dist22 = distance(lonlat(*endpoint2), lonlat(*downstream_endpoint2)).meters
 
         # Add connection if the minimum of every possible distance is less than 30m
         if np.min([dist11, dist12, dist21, dist22]) <= 30.0:
@@ -794,32 +729,22 @@ def compute_connectivity(upstream_reach, downstream_reach, rep_reaches):
 
     # Find connections between reaches in rep_reaches
     for from_index, from_feature in enumerate(rep_reaches[:-1]):
-
         # Retrieve "from" feature endpoints
         from_geometry = shape(from_feature["geometry"])
         from_endpoint1 = from_geometry.coords[0]
         from_endpoint2 = from_geometry.coords[-1]
 
         for to_feature in rep_reaches[from_index + 1 :]:
-
             # Retrieve "to" feature endpoints
             to_geometry = shape(to_feature["geometry"])
             to_endpoint1 = to_geometry.coords[0]
             to_endpoint2 = to_geometry.coords[-1]
 
             # Compute every possible distance between endpoints
-            dist12 = distance(
-                lonlat(*from_endpoint1), lonlat(*to_endpoint2)
-            ).meters
-            dist21 = distance(
-                lonlat(*from_endpoint2), lonlat(*to_endpoint1)
-            ).meters
-            dist11 = distance(
-                lonlat(*from_endpoint1), lonlat(*to_endpoint1)
-            ).meters
-            dist22 = distance(
-                lonlat(*from_endpoint2), lonlat(*to_endpoint2)
-            ).meters
+            dist12 = distance(lonlat(*from_endpoint1), lonlat(*to_endpoint2)).meters
+            dist21 = distance(lonlat(*from_endpoint2), lonlat(*to_endpoint1)).meters
+            dist11 = distance(lonlat(*from_endpoint1), lonlat(*to_endpoint1)).meters
+            dist22 = distance(lonlat(*from_endpoint2), lonlat(*to_endpoint2)).meters
 
             # Check for wrong ordered geometries or add connectivity if distance is less than 50m
             if dist12 < 50.0 and dist21 < 50.0:
@@ -834,9 +759,7 @@ def compute_connectivity(upstream_reach, downstream_reach, rep_reaches):
                     [point[1] for point in to_geometry.coords],
                 )
                 plt.show()
-                raise RuntimeError(
-                    "Both endpoint 1<->2 distances are less than 50.0"
-                )
+                raise RuntimeError("Both endpoint 1<->2 distances are less than 50.0")
             elif dist12 < 50.0:
                 add_two_reaches_connection(to_feature, from_feature)
             elif dist21 < 50.0:
@@ -862,7 +785,6 @@ def apply_default_attributes(src, default_attributes):
 
     # Loop on features in source
     for feature in src:
-
         # Apply default attributes
         feature["properties"] = default_attributes.copy()
 
@@ -888,7 +810,6 @@ def compute_reaches_distances(downstream_reach, reaches_id_table):
     )
     stack = [(downstream_reach["properties"]["reach_id"], ds_dist_out)]
     while len(stack) > 0:
-
         reach_id, ds_dist_out = stack.pop(0)
         reach = reaches_id_table[reach_id]
         reach_length = reach["properties"]["reach_len"]
@@ -935,9 +856,7 @@ def replace_node_on_reach(node, reach):
     # dist = reach_geometry.project(
     #    node_geometry
     # )
-    point_on_reach = reach_geometry.interpolate(
-        reach_geometry.project(node_geometry)
-    )
+    point_on_reach = reach_geometry.interpolate(reach_geometry.project(node_geometry))
 
     # Test if node is close to the end points
     endpoint1 = reach_geometry.interpolate(0.0)
@@ -951,12 +870,10 @@ def replace_node_on_reach(node, reach):
         lonlat(point_on_reach.x, point_on_reach.y),
     ).meters
     if distance1 < 50.0 or distance2 < 50.0:
-
         # Set new node to None for node close to one of the endpoints
         new_node = None
 
     else:
-
         # Create new node
         new_node = {
             "geometry": mapping(point_on_reach),
@@ -968,7 +885,6 @@ def replace_node_on_reach(node, reach):
             lonlat(node_geometry.x, node_geometry.y),
         ).meters
         if disp > 10.0:
-
             # Update outlet distance
             alpha = distance1 / reach_geometry.length
             dn_dist_out = reach["properties"]["dist_out"]
@@ -1004,7 +920,6 @@ def create_nodes(reaches, default_attributes, spacing=200.0):
     # (LineString, feature index in the source, index of the LineString in the source geometry)
     segments = []
     for feature_index, feature in enumerate(reaches):
-
         # Retrieve geometry of the feature
         geometry = shape(feature["geometry"])
 
@@ -1012,26 +927,21 @@ def create_nodes(reaches, default_attributes, spacing=200.0):
         reach_id = feature["properties"]["reach_id"]
 
         if geometry.geom_type == "MultiLineString":
-
             # Extract LineStrings of a MultiLineString object
             for index, geom in enumerate(geometry.geoms):
                 segments.append((geom, feature_index, index, reach_id))
 
         elif geometry.geom_type == "LineString":
-
             # Store LineString
             segments.append((geometry, feature_index, 0, reach_id))
 
         else:
-            raise RuntimeError(
-                f"Cannot process geometry of type {geometry.geom_type}"
-            )
+            raise RuntimeError(f"Cannot process geometry of type {geometry.geom_type}")
 
     # Loop on segments to create nodes
     nodes = []
     reach_nodes_count_dict = {}
     for segment in segments:
-
         # Retrieve objects from the tuple
         geometry, feature_index, _, reach_id = segment
         reach_type = int(reach_id[-1])
@@ -1062,12 +972,10 @@ def create_nodes(reaches, default_attributes, spacing=200.0):
 
         # Loop on remaining points in the geometry
         for lon2, lat2 in coords[1:]:
-
             # Compute distance increment between current Point2 and Point1
             ddist = distance(lonlat(lon1, lat1), lonlat(lon2, lat2)).meters
 
             if dist + ddist >= next_node_dist:
-
                 # Create a new node as dist + ddist >= next_node_dist
                 alpha = (next_node_dist - dist) / ddist
                 lon = lon1 + alpha * (lon2 - lon1)
@@ -1080,9 +988,9 @@ def create_nodes(reaches, default_attributes, spacing=200.0):
                     "properties": default_attributes.copy(),
                 }
                 node_index += 1
-                new_node["properties"][
-                    "node_id"
-                ] = f"{reach_id[:-1]}{node_index:04d}{reach_type}"
+                new_node["properties"]["node_id"] = (
+                    f"{reach_id[:-1]}{node_index:04d}{reach_type}"
+                )
                 nodes.append(new_node)
                 # nodes.append(new_node(Point((lon, lat)), feature_index, subindex, len(nodes)+1))
 
@@ -1108,3 +1016,781 @@ def create_nodes(reaches, default_attributes, spacing=200.0):
         feature["properties"]["n_nodes"] = reach_nodes_count_dict[reach_id]
 
     return nodes
+
+
+def explode_lines(geom):
+    """
+    Convert a LineString or MultiLineString into a
+    list of LineStrings.
+
+    Parameters
+    ----------
+    geom : LineString | MultiLineString
+        Input geometry.
+
+    Returns
+    -------
+    list[LineString]
+        Individual LineStrings extracted from the
+        input geometry.
+
+    Raises
+    ------
+    ValueError
+        If the geometry type is unsupported.
+    """
+
+    logging.info(
+        "Exploding geometry of type '%s'",
+        geom.geom_type,
+    )
+
+    if geom.geom_type == "LineString":
+        return [geom]
+
+    if geom.geom_type == "MultiLineString":
+        return list(geom.geoms)
+
+    raise ValueError(f"Unsupported geometry type: {geom.geom_type}")
+
+
+def are_connected(
+    line1,
+    line2,
+    tolerance=1e-5,
+):
+    """
+    Check whether two reaches are connected.
+
+    Connectivity is evaluated using reach
+    endpoints and endpoint-to-line distances.
+
+    Parameters
+    ----------
+    line1 : LineString
+        First reach.
+
+    line2 : LineString
+        Second reach.
+
+    tolerance : float, optional
+        Distance tolerance used to determine
+        connectivity.
+
+    Returns
+    -------
+    bool
+        True if the reaches are connected,
+        False otherwise.
+    """
+
+    logging.debug("Checking connectivity between two reaches")
+
+    endpoints1 = [
+        Point(line1.coords[0]),
+        Point(line1.coords[-1]),
+    ]
+
+    endpoints2 = [
+        Point(line2.coords[0]),
+        Point(line2.coords[-1]),
+    ]
+
+    for p1 in endpoints1:
+        if p1.distance(line2) < tolerance:
+            return True
+
+        for p2 in endpoints2:
+            if p1.distance(p2) < tolerance:
+                return True
+
+    return False
+
+
+def find_intersected_reaches(
+    sword_features,
+    replacement_features,
+):
+    """
+    Find all SWORD reaches intersecting the
+    replacement network.
+
+    Parameters
+    ----------
+    sword_features : list[dict]
+        SWORD GeoJSON features.
+
+    replacement_features : list[dict]
+        Replacement GeoJSON features.
+
+    Returns
+    -------
+    list[dict]
+        Intersected SWORD reaches.
+    """
+
+    logging.info("Searching for intersected SWORD reaches")
+
+    intersected_reaches = []
+
+    for sword_feature in sword_features:
+        sword_geom = shape(sword_feature["geometry"])
+
+        for replacement_feature in replacement_features:
+            replacement_geom = shape(replacement_feature["geometry"])
+
+            if sword_geom.intersects(replacement_geom):
+                intersected_reaches.append(sword_feature)
+
+                break
+
+    logging.info(
+        "Found %s intersected reaches",
+        len(intersected_reaches),
+    )
+
+    return intersected_reaches
+
+
+def find_upstream_downstream_reaches(
+    intersected_reaches,
+):
+    """
+    Identify upstream and downstream reaches
+    among intersected reaches.
+
+    Upstream reach is the feature with the
+    maximum dist_out value.
+
+    Downstream reach is the feature with the
+    minimum dist_out value.
+
+    Parameters
+    ----------
+    intersected_reaches : list[dict]
+
+    Returns
+    -------
+    tuple(dict, dict)
+        upstream_reach,
+        downstream_reach
+    """
+
+    logging.info("Finding upstream and downstream reaches")
+
+    upstream_reach = max(
+        intersected_reaches,
+        key=lambda f: f["properties"]["dist_out"],
+    )
+
+    downstream_reach = min(
+        intersected_reaches,
+        key=lambda f: f["properties"]["dist_out"],
+    )
+
+    logging.info("Selected upstream and downstream reaches")
+
+    return (
+        upstream_reach,
+        downstream_reach,
+    )
+
+
+def find_upstream_intersection_point(
+    upstream_reach,
+    replacement_features,
+):
+    """
+    Find the upstream-most intersection point
+    between the upstream reach and the
+    replacement network.
+
+    Parameters
+    ----------
+    upstream_reach : dict
+        SWORD reach.
+
+    replacement_features : list[dict]
+        Replacement GeoJSON features.
+
+    Returns
+    -------
+    Point
+        Upstream intersection point.
+    """
+
+    logging.info("Searching upstream intersection point")
+
+    reach_geom = shape(upstream_reach["geometry"])
+
+    points = []
+
+    for replacement_feature in replacement_features:
+        replacement_geom = shape(replacement_feature["geometry"])
+
+        inter = reach_geom.intersection(replacement_geom)
+
+        if inter.is_empty:
+            continue
+
+        if inter.geom_type == "Point":
+            points.append(inter)
+
+        elif inter.geom_type == "MultiPoint":
+            points.extend(inter.geoms)
+
+    if not points:
+        raise ValueError("No upstream intersection point found.")
+
+    point = max(
+        points,
+        key=reach_geom.project,
+    )
+
+    logging.info(
+        "Upstream intersection located at (%s, %s)",
+        point.x,
+        point.y,
+    )
+
+    return point
+
+
+def trim_replacement_between_points(
+    replacement_features,
+    upstream_point,
+    downstream_point,
+):
+    """
+    Trim the replacement network between the upstream
+    and downstream intersection points.
+
+    The line intersecting the upstream point is trimmed
+    after the intersection. The line intersecting the
+    downstream point is trimmed before the intersection.
+    Intermediate replacement lines are preserved.
+
+    Parameters
+    ----------
+    replacement_features : list[dict]
+        Replacement GeoJSON features.
+
+    upstream_point : Point
+        Upstream intersection point.
+
+    downstream_point : Point
+        Downstream intersection point.
+
+    Returns
+    -------
+    MultiLineString
+        Trimmed replacement network.
+    """
+
+    logging.info("Trimming replacement network between intersection points")
+
+    lines = []
+
+    for feature in replacement_features:
+        geom = shape(feature["geometry"])
+
+        lines.extend(explode_lines(geom))
+
+    output_lines = []
+
+    for line in lines:
+        touches_upstream = line.distance(upstream_point) < 1e-8
+
+        touches_downstream = line.distance(downstream_point) < 1e-8
+
+        if touches_upstream and touches_downstream:
+            line = snap(
+                line,
+                upstream_point,
+                1e-5,
+            )
+
+            line = snap(
+                line,
+                downstream_point,
+                1e-5,
+            )
+
+            parts = list(
+                split(
+                    line,
+                    upstream_point,
+                ).geoms
+            )
+
+            middle_parts = []
+
+            for part in parts:
+                for subpart in split(
+                    part,
+                    downstream_point,
+                ).geoms:
+                    if (
+                        subpart.distance(upstream_point) < 1e-8
+                        and subpart.distance(downstream_point) < 1e-8
+                    ):
+                        middle_parts.append(subpart)
+
+            output_lines.extend(middle_parts)
+
+            continue
+
+        if touches_upstream:
+            output_lines.append(
+                keep_upstream_part(
+                    {"geometry": line.__geo_interface__},
+                    upstream_point,
+                )
+            )
+
+            continue
+
+        if touches_downstream:
+            output_lines.append(
+                keep_downstream_part(
+                    {"geometry": line.__geo_interface__},
+                    downstream_point,
+                )
+            )
+
+            continue
+
+        output_lines.append(line)
+
+    logging.info(
+        "Generated %s replacement line(s) after trimming",
+        len(output_lines),
+    )
+
+    return MultiLineString(output_lines)
+
+
+def insert_pivot_points(
+    replacement_geom,
+    upstream_point,
+    downstream_point,
+    tolerance=1e-5,
+):
+
+    lines = explode_lines(replacement_geom)
+
+    result_lines = []
+
+    for line in lines:
+        line = snap(
+            line,
+            upstream_point,
+            tolerance,
+        )
+
+        line = snap(
+            line,
+            downstream_point,
+            tolerance,
+        )
+
+        parts = [line]
+
+        for pivot in (
+            upstream_point,
+            downstream_point,
+        ):
+            new_parts = []
+
+            for part in parts:
+                try:
+                    if part.distance(pivot) < tolerance:
+                        split_result = split(
+                            part,
+                            pivot,
+                        )
+
+                        new_parts.extend(split_result.geoms)
+
+                    else:
+                        new_parts.append(part)
+
+                except Exception:
+                    new_parts.append(part)
+
+            parts = new_parts
+
+        result_lines.extend(parts)
+
+    return MultiLineString(result_lines)
+
+
+def find_downstream_intersection_point(
+    downstream_reach,
+    replacement_features,
+):
+
+    reach_geom = shape(downstream_reach["geometry"])
+
+    points = []
+
+    for replacement_feature in replacement_features:
+        replacement_geom = shape(replacement_feature["geometry"])
+
+        inter = reach_geom.intersection(replacement_geom)
+
+        if inter.is_empty:
+            continue
+
+        if inter.geom_type == "Point":
+            points.append(inter)
+
+        elif inter.geom_type == "MultiPoint":
+            points.extend(inter.geoms)
+
+    if not points:
+        raise ValueError("No downstream intersection point found.")
+
+    return min(
+        points,
+        key=reach_geom,
+    )
+
+
+def keep_upstream_part(
+    reach,
+    intersection_point,
+):
+    """
+    Split a reach at the intersection point and
+    keep the upstream portion.
+
+    Parameters
+    ----------
+    reach : dict
+        Reach feature.
+
+    intersection_point : Point
+        Split location.
+
+    Returns
+    -------
+    LineString
+        Upstream reach segment.
+    """
+
+    logging.info("Keeping upstream reach segment")
+
+    geom = shape(reach["geometry"])
+
+    geom = snap(
+        geom,
+        intersection_point,
+        1e-5,
+    )
+
+    parts = list(
+        split(
+            geom,
+            intersection_point,
+        ).geoms
+    )
+
+    upstream_point = Point(geom.coords[-1])
+
+    result = min(
+        parts,
+        key=lambda g: g.distance(upstream_point),
+    )
+
+    logging.info(
+        "Upstream segment length: %s",
+        result.length,
+    )
+
+    return result
+
+
+def keep_downstream_part(
+    reach,
+    intersection_point,
+):
+    """
+    Split a reach at the intersection point and
+    keep the downstream portion.
+
+    Parameters
+    ----------
+    reach : dict
+        Reach feature.
+
+    intersection_point : Point
+        Split location.
+
+    Returns
+    -------
+    LineString
+        Downstream reach segment.
+    """
+
+    logging.info("Keeping downstream reach segment")
+
+    geom = shape(reach["geometry"])
+
+    geom = snap(
+        geom,
+        intersection_point,
+        1e-5,
+    )
+
+    parts = list(
+        split(
+            geom,
+            intersection_point,
+        ).geoms
+    )
+
+    downstream_point = Point(geom.coords[0])
+
+    result = min(
+        parts,
+        key=lambda g: g.distance(
+            downstream_point,
+        ),
+    )
+
+    logging.info(
+        "Downstream segment length: %s",
+        result.length,
+    )
+
+    return result
+
+
+def build_corrected_network(
+    upstream_part,
+    replacement_part,
+    downstream_part,
+):
+    """
+    Assemble the corrected network from the
+    upstream reach, replacement network and
+    downstream reach.
+
+    Parameters
+    ----------
+    upstream_part : LineString
+
+    replacement_part : LineString | MultiLineString
+
+    downstream_part : LineString
+
+    Returns
+    -------
+    LineString | MultiLineString
+        Corrected merged network.
+    """
+
+    logging.info("Building corrected network")
+
+    lines = []
+
+    lines.extend(explode_lines(upstream_part))
+
+    lines.extend(explode_lines(replacement_part))
+
+    lines.extend(explode_lines(downstream_part))
+
+    logging.info(
+        "Building network from %s line elements",
+        len(lines),
+    )
+
+    return linemerge(MultiLineString(lines))
+
+
+def find_connection_points(
+    geom,
+    tolerance=1e-5,
+):
+    """
+    Find network connection nodes.
+
+    A connection node is an endpoint touching
+    another line of the network.
+
+    Parameters
+    ----------
+    geom : LineString | MultiLineString
+
+    tolerance : float
+
+    Returns
+    -------
+    list[Point]
+        Connection points.
+    """
+
+    logging.info("Searching connection points")
+
+    lines = explode_lines(geom)
+
+    connection_points = []
+
+    for i, line1 in enumerate(lines):
+        endpoints = [
+            Point(line1.coords[0]),
+            Point(line1.coords[-1]),
+        ]
+
+        for endpoint in endpoints:
+            for j, line2 in enumerate(lines):
+                if i == j:
+                    continue
+
+                if endpoint.distance(line2) < tolerance:
+                    connection_points.append(endpoint)
+
+                    break
+
+    logging.info(
+        "Found %s connection point(s)",
+        len(connection_points),
+    )
+
+    return connection_points
+
+
+def split_at_nodes(
+    multiline,
+    tolerance=1e-5,
+):
+    """
+    Split a network at all detected connection
+    points.
+
+    Parameters
+    ----------
+    multiline : LineString | MultiLineString
+
+    tolerance : float
+
+    Returns
+    -------
+    list[LineString]
+        Segments generated after splitting.
+    """
+
+    logging.info("Splitting network at connection points")
+
+    nodes = find_connection_points(
+        multiline,
+        tolerance=tolerance,
+    )
+
+    if not nodes:
+        logging.info("No connection points found")
+
+        if multiline.geom_type == "LineString":
+            return [multiline]
+
+        return list(multiline.geoms)
+
+    splitter = MultiPoint(nodes)
+
+    segments = []
+
+    for line in multiline.geoms:
+        try:
+            parts = split(
+                line,
+                splitter,
+            )
+
+            segments.extend(parts.geoms)
+
+        except Exception:
+            segments.append(line)
+
+    logging.info(
+        "Generated %s segments after split",
+        len(segments),
+    )
+
+    return segments
+
+
+def merge_non_pivot_segments(
+    segments,
+    precision=6,
+):
+    """
+    Identify pivot nodes and merge connected
+    segments.
+
+    A pivot node is defined as a node whose
+    degree is greater than 2.
+
+    Parameters
+    ----------
+    segments : list[LineString]
+
+    precision : int
+
+    Returns
+    -------
+    tuple
+        (
+            merged_geometry,
+            pivot_nodes,
+        )
+    """
+
+    logging.info("Merging non-pivot segments")
+
+    endpoints = []
+
+    for line in segments:
+        endpoints.append(
+            (
+                round(
+                    line.coords[0][0],
+                    precision,
+                ),
+                round(
+                    line.coords[0][1],
+                    precision,
+                ),
+            )
+        )
+
+        endpoints.append(
+            (
+                round(
+                    line.coords[-1][0],
+                    precision,
+                ),
+                round(
+                    line.coords[-1][1],
+                    precision,
+                ),
+            )
+        )
+
+    count = Counter(endpoints)
+
+    pivot_nodes = [node for node, degree in count.items() if degree > 2]
+
+    logging.info(
+        "Detected %s pivot node(s)",
+        len(pivot_nodes),
+    )
+
+    merged = linemerge(MultiLineString(segments))
+
+    logging.info("Segment merging completed")
+
+    return (
+        merged,
+        pivot_nodes,
+    )
