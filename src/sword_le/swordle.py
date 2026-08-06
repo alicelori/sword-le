@@ -28,7 +28,14 @@ import numpy as np
 import pyproj
 
 from geopy.distance import distance, lonlat
-from shapely.geometry import MultiLineString, MultiPoint, Point, mapping, shape
+from shapely.geometry import (
+    MultiLineString,
+    MultiPoint,
+    LineString,
+    Point,
+    mapping,
+    shape,
+)
 from shapely.ops import linemerge, snap, split, transform, unary_union
 
 
@@ -1796,3 +1803,58 @@ def merge_non_pivot_segments(
         merged,
         pivot_nodes,
     )
+
+
+def orient_reaches_downstream_to_upstream(
+    segments,
+    downstream_point,
+):
+    """
+    Orient reaches from downstream to upstream.
+
+    The first coordinate of each reach is forced
+    to be the downstream extremity and the last
+    coordinate the upstream extremity.
+
+    Orientation is determined using the distance
+    between reach endpoints and the downstream
+    reference point.
+
+    Parameters
+    ----------
+    segments : list[LineString]
+        Reach geometries to orient.
+
+    downstream_point : Point
+        Downstream reference point.
+
+    Returns
+    -------
+    list[LineString]
+        Oriented reach geometries.
+    """
+
+    logger.info(
+        "Orienting %s reach(es) from downstream to upstream",
+        len(segments),
+    )
+
+    oriented_segments = []
+
+    for line in segments:
+        start_point = Point(line.coords[0])
+
+        end_point = Point(line.coords[-1])
+
+        start_dist = start_point.distance(downstream_point)
+
+        end_dist = end_point.distance(downstream_point)
+
+        if start_dist > end_dist:
+            line = LineString(list(line.coords)[::-1])
+
+        oriented_segments.append(line)
+
+    logger.info("Reach orientation completed")
+
+    return oriented_segments

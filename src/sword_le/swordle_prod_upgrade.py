@@ -260,6 +260,10 @@ def run_pipeline(
     segments, pivot_nodes = swordle.merge_non_pivot_segments(segments)
     segments = swordle.explode_lines(segments)
 
+    segments = swordle.orient_reaches_downstream_to_upstream(
+        segments,
+        downstream_intersection_point,
+    )
     if obstruction_path and Path(obstruction_path).exists():
         logger.info(
             "Loading obstruction database: %s",
