@@ -48,7 +48,6 @@ import sys
 from pathlib import Path
 import fiona
 from shapely.geometry import mapping, shape, box
-import geopandas as gpd
 from sword_le import swordle
 from generate_id import generate_reaches_id
 from save_metadata import (
@@ -57,6 +56,7 @@ from save_metadata import (
     add_new_reaches_to_json,
 )
 from sword_segmentation import split_long_lines, cut_at_obstructions, load_obstructions
+from reconstruct_sword import rebuild_sword_network
 # ========================================================================================
 # Utility functions for saving ESRI shapefiles
 # ========================================================================================
@@ -286,17 +286,14 @@ def run_pipeline(
         metadata_json,
         new_reaches,
     )
-    gdf = gpd.GeoDataFrame(
-        {
-            "id": range(len(segments)),
-            "has_obstruction": [segment["has_obstruction"] for segment in segments],
-        },
-        geometry=[segment["geometry"] for segment in segments],
-        crs="EPSG:4326",
+    gdf = rebuild_sword_network(
+        sword_features=src,
+        replaced_ids=replaced_reach_ids,
+        final_geometry=segments,
     )
 
     gdf.to_file(
-        Path(results_dir) / "final_geometry.gpkg",
+        Path(results_dir) / "sword.gpkg",
         driver="GPKG",
     )
 
