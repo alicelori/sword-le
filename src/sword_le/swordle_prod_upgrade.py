@@ -49,7 +49,7 @@ from pathlib import Path
 import fiona
 from shapely.geometry import mapping, shape, box
 import geopandas as gpd
-
+from generate_id import generate_reaches_id
 from sword_le import swordle
 from sword_segmentation import split_long_lines, cut_at_obstructions, load_obstructions
 # ========================================================================================
@@ -249,7 +249,7 @@ def run_pipeline(
     )
     segments, pivot_nodes = swordle.merge_non_pivot_segments(segments)
     segments = swordle.explode_lines(segments)
-    print(len(segments))
+
     if obstruction_path and Path(obstruction_path).exists():
         logger.info(
             "Loading obstruction database: %s",
@@ -267,6 +267,11 @@ def run_pipeline(
         logger.info("No obstruction database found. Skipping obstruction processing.")
 
     segments = split_long_lines(segments)
+
+    segments, new_reaches = generate_reaches_id(
+        upstream_reach["properties"]["reach_id"],
+        segments,
+    )
 
     gdf = gpd.GeoDataFrame(
         {
