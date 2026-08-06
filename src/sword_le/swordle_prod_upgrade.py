@@ -49,8 +49,13 @@ from pathlib import Path
 import fiona
 from shapely.geometry import mapping, shape, box
 import geopandas as gpd
-from generate_id import generate_reaches_id
 from sword_le import swordle
+from generate_id import generate_reaches_id
+from save_metadata import (
+    find_replaced_reaches,
+    save_boundary_reaches,
+    add_new_reaches_to_json,
+)
 from sword_segmentation import split_long_lines, cut_at_obstructions, load_obstructions
 # ========================================================================================
 # Utility functions for saving ESRI shapefiles
@@ -206,6 +211,11 @@ def run_pipeline(
     ) = swordle.find_upstream_downstream_reaches(
         intersected_reaches,
     )
+    replaced_reach_ids = find_replaced_reaches(src, upstream_reach, downstream_reach)
+    metadata_json = save_boundary_reaches(
+        upstream_reach, downstream_reach, results_dir, replaced_reach_ids
+    )
+
     upstream_intersection_point = swordle.find_upstream_intersection_point(
         upstream_reach,
         rep,
@@ -272,7 +282,10 @@ def run_pipeline(
         upstream_reach["properties"]["reach_id"],
         segments,
     )
-
+    add_new_reaches_to_json(
+        metadata_json,
+        new_reaches,
+    )
     gdf = gpd.GeoDataFrame(
         {
             "id": range(len(segments)),
