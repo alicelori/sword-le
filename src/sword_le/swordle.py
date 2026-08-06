@@ -26,9 +26,11 @@ from collections import Counter
 import matplotlib.pyplot as plt
 import numpy as np
 import pyproj
+
 from geopy.distance import distance, lonlat
 from shapely.geometry import MultiLineString, MultiPoint, Point, mapping, shape
 from shapely.ops import linemerge, snap, split, transform, unary_union
+
 
 logger = logging.getLogger("swordle")
 
@@ -1244,7 +1246,7 @@ def find_upstream_intersection_point(
 
     point = max(
         points,
-        key=reach_geom.project,
+        key=lambda p: reach_geom.project(p),
     )
 
     logging.info(
@@ -1453,7 +1455,7 @@ def find_downstream_intersection_point(
 
     return min(
         points,
-        key=reach_geom,
+        key=lambda p: reach_geom.project(p),
     )
 
 

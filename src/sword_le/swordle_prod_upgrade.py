@@ -49,8 +49,9 @@ from pathlib import Path
 import fiona
 from shapely.geometry import mapping, shape, box
 import geopandas as gpd
-from sword_le import swordle
 
+from sword_le import swordle
+from sword_segmentation import split_long_lines, cut_at_obstructions, load_obstructions
 # ========================================================================================
 # Utility functions for saving ESRI shapefiles
 # ========================================================================================
@@ -175,6 +176,7 @@ def run_pipeline(
     sword_path: str,
     logic: str,
     replacement_path: str,
+    obstruction_path: str,
     default_attr_path: str,
     results_dir: str,
 ):
@@ -247,10 +249,31 @@ def run_pipeline(
     )
     segments, pivot_nodes = swordle.merge_non_pivot_segments(segments)
     segments = swordle.explode_lines(segments)
+    print(len(segments))
+    if obstruction_path and Path(obstruction_path).exists():
+        logger.info(
+            "Loading obstruction database: %s",
+            obstruction_path,
+        )
+
+        obstruction_points = load_obstructions(obstruction_path)
+
+        segments = cut_at_obstructions(
+            segments,
+            obstruction_points,
+        )
+
+    else:
+        logger.info("No obstruction database found. Skipping obstruction processing.")
+
+    segments = split_long_lines(segments)
 
     gdf = gpd.GeoDataFrame(
-        {"id": range(len(segments))},
-        geometry=segments,
+        {
+            "id": range(len(segments)),
+            "has_obstruction": [segment["has_obstruction"] for segment in segments],
+        },
+        geometry=[segment["geometry"] for segment in segments],
         crs="EPSG:4326",
     )
 
@@ -277,6 +300,12 @@ def build_arg_parser():
         choices=["1", "2"],
         default="2",
         help="Choice of logic for upstream/downstream selection (1 or 2). Default : 2.",
+    )
+    p.add_argument(
+        "--obs_bd",
+        required=False,
+        default=None,
+        help="Give obstruction database",
     )
     p.add_argument(
         "--replacement", required=True, help="Shapefile replacement (TOPAGE)"
@@ -319,6 +348,7 @@ def main():
             sword_path=args.sword,
             logic=args.logic,
             replacement_path=args.replacement,
+            obstruction_path=args.obs_bd,
             default_attr_path=args.default_attributes,
             results_dir=args.results.rstrip(os.sep) + os.sep,
         )
