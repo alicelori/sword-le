@@ -57,6 +57,7 @@ from save_metadata import (
 )
 from sword_segmentation import split_long_lines, cut_at_obstructions, load_obstructions
 from reconstruct_sword import rebuild_sword_network
+from create_nodes import create_nodes_on_replacement_reaches
 # ========================================================================================
 # Utility functions for saving ESRI shapefiles
 # ========================================================================================
@@ -290,6 +291,16 @@ def run_pipeline(
         metadata_json,
         new_reaches,
     )
+    nodes_gdf = create_nodes_on_replacement_reaches(
+        segments,
+        spacing=200.0,
+    )
+
+    nodes_gdf.to_file(
+        Path(results_dir) / "replacement_nodes.gpkg",
+        driver="GPKG",
+    )
+
     gdf = rebuild_sword_network(
         sword_features=src,
         replaced_ids=replaced_reach_ids,
