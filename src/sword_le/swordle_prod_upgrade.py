@@ -55,7 +55,12 @@ from save_metadata import (
     save_boundary_reaches,
     add_new_reaches_to_json,
 )
-from sword_segmentation import split_long_lines, cut_at_obstructions, load_obstructions
+from sword_segmentation import (
+    split_long_lines,
+    cut_at_obstructions,
+    load_obstructions,
+    merge_short_reaches,
+)
 from reconstruct_sword import rebuild_sword_network
 from create_nodes import create_nodes_on_replacement_reaches
 # ========================================================================================
@@ -282,7 +287,10 @@ def run_pipeline(
         logger.info("No obstruction database found. Skipping obstruction processing.")
 
     segments = split_long_lines(segments)
-
+    segments = merge_short_reaches(
+        segments,
+        pivot_nodes,
+    )
     segments, new_reaches = generate_reaches_id(
         upstream_reach["properties"]["reach_id"],
         segments,
