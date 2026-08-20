@@ -63,6 +63,7 @@ from sword_segmentation import (
 )
 from reconstruct_sword import rebuild_sword_network
 from create_nodes import create_nodes_on_replacement_reaches
+from tools.geom_utils import resample_line
 # ========================================================================================
 # Utility functions for saving ESRI shapefiles
 # ========================================================================================
@@ -264,8 +265,10 @@ def run_pipeline(
         tolerance=1e-5,
     )
     segments, pivot_nodes = swordle.merge_non_pivot_segments(segments)
-    segments = swordle.explode_lines(segments)
 
+    segments = swordle.explode_lines(segments)
+    # 0.0002 ~ 30m
+    segments = [resample_line(line, 0.0002) for line in segments]
     segments = swordle.orient_reaches_downstream_to_upstream(
         segments,
         downstream_intersection_point,
