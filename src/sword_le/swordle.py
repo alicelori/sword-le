@@ -21,8 +21,7 @@
 
 import logging
 import math
-from collections import Counter
-
+from collections import Counter, deque
 import matplotlib.pyplot as plt
 import numpy as np
 import pyproj
@@ -37,7 +36,6 @@ from shapely.geometry import (
     shape,
 )
 from shapely.ops import linemerge, snap, split, transform, unary_union
-
 
 logger = logging.getLogger("swordle")
 
@@ -1027,40 +1025,43 @@ def create_nodes(reaches, default_attributes, spacing=200.0):
     return nodes
 
 
-def explode_lines(geom):
-    """
-    Convert a LineString or MultiLineString into a
-    list of LineStrings.
+def explode_lines(obj):
 
-    Parameters
-    ----------
-    geom : LineString | MultiLineString
-        Input geometry.
+    if isinstance(obj, list):
+        exploded = []
 
-    Returns
-    -------
-    list[LineString]
-        Individual LineStrings extracted from the
-        input geometry.
+        for item in obj:
+            exploded.extend(explode_lines(item))
 
-    Raises
-    ------
-    ValueError
-        If the geometry type is unsupported.
-    """
+        return exploded
 
-    logging.info(
-        "Exploding geometry of type '%s'",
-        geom.geom_type,
-    )
+    if isinstance(obj, dict):
+        geom = obj["geometry"]
 
-    if geom.geom_type == "LineString":
-        return [geom]
+        if isinstance(geom, LineString):
+            return [
+                {
+                    **obj,
+                    "geometry": geom,
+                }
+            ]
 
-    if geom.geom_type == "MultiLineString":
-        return list(geom.geoms)
+        if isinstance(geom, MultiLineString):
+            return [
+                {
+                    **obj,
+                    "geometry": part,
+                }
+                for part in geom.geoms
+            ]
 
-    raise ValueError(f"Unsupported geometry type: {geom.geom_type}")
+    elif isinstance(obj, LineString):
+        return [obj]
+
+    elif isinstance(obj, MultiLineString):
+        return list(obj.geoms)
+
+    raise ValueError(f"Unsupported geometry type: {type(obj)}")
 
 
 def are_connected(
@@ -1805,56 +1806,111 @@ def merge_non_pivot_segments(
     )
 
 
+def same_point(
+    p1,
+    p2,
+    precision=10,
+):
+    return round(p1[0], precision) == round(p2[0], precision) and round(
+        p1[1], precision
+    ) == round(p2[1], precision)
+
+
 def orient_reaches_downstream_to_upstream(
     segments,
-    downstream_point,
+    downstream_reach,
 ):
     """
-    Orient reaches from downstream to upstream.
-
-    The first coordinate of each reach is forced
-    to be the downstream extremity and the last
-    coordinate the upstream extremity.
-
-    Orientation is determined using the distance
-    between reach endpoints and the downstream
-    reference point.
+    Orient replacement reaches from downstream
+    to upstream.
 
     Parameters
     ----------
-    segments : list[LineString]
-        Reach geometries to orient.
+    segments : list[dict]
 
-    downstream_point : Point
-        Downstream reference point.
+    downstream_reach : dict
 
     Returns
     -------
-    list[LineString]
-        Oriented reach geometries.
+    list[dict]
     """
 
-    logger.info(
-        "Orienting %s reach(es) from downstream to upstream",
-        len(segments),
-    )
+    if not segments:
+        return []
 
-    oriented_segments = []
+    downstream_geom = shape(downstream_reach["geometry"])
 
-    for line in segments:
-        start_point = Point(line.coords[0])
+    downstream_point = tuple(downstream_geom.coords[0])
 
-        end_point = Point(line.coords[-1])
+    remaining = list(segments)
 
-        start_dist = start_point.distance(downstream_point)
+    oriented = []
 
-        end_dist = end_point.distance(downstream_point)
+    points_to_process = deque([downstream_point])
 
-        if start_dist > end_dist:
-            line = LineString(list(line.coords)[::-1])
+    while points_to_process:
+        current_point = points_to_process.popleft()
 
-        oriented_segments.append(line)
+        matched = []
 
-    logger.info("Reach orientation completed")
+        for i, segment in enumerate(remaining):
+            geom = shape(segment["geometry"])
 
-    return oriented_segments
+            start_point = tuple(geom.coords[0])
+
+            end_point = tuple(geom.coords[-1])
+
+            if same_point(
+                start_point,
+                current_point,
+            ):
+                matched.append(
+                    (
+                        i,
+                        {
+                            **segment,
+                            "geometry": geom,
+                        },
+                    )
+                )
+
+            elif same_point(
+                end_point,
+                current_point,
+            ):
+                matched.append(
+                    (
+                        i,
+                        {
+                            **segment,
+                            "geometry": LineString(list(geom.coords)[::-1]),
+                        },
+                    )
+                )
+
+        for i, segment in sorted(
+            matched,
+            key=lambda x: x[0],
+            reverse=True,
+        ):
+            remaining.pop(i)
+
+            oriented.append(segment)
+
+            points_to_process.append(tuple(segment["geometry"].coords[-1]))
+
+    if remaining:
+        print(f"{len(remaining)} segments non orientés :")
+
+        for segment in remaining:
+            geom = shape(segment["geometry"])
+
+            print(
+                tuple(geom.coords[0]),
+                "->",
+                tuple(geom.coords[-1]),
+            )
+
+        raise RuntimeError(f"{len(remaining)} reach(es) could not be oriented.")
+
+    return oriented
