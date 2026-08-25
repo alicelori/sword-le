@@ -35,9 +35,9 @@ import json
 import logging
 import os
 import sys
-from pathlib import Path
 import fiona
-from shapely.geometry import mapping, shape, box
+import geopandas as gpd
+from pathlib import Path
 from sword_le import swordle
 from generate_id import generate_reaches_id
 from save_metadata import (
@@ -159,15 +159,22 @@ def run_pipeline(
 
     segments = swordle.explode_lines(segments)
 
-    # 0.0002 ~ 30m
-    segments = [resample_line(line, 0.0002) for line in segments]
+    utm_crs = gpd.GeoDataFrame(
+        geometry=segments,
+        crs="EPSG:4326",
+    ).estimate_utm_crs()
+    segments = [
+        swordle.reproject_geometry(seg, "EPSG:4326", utm_crs) for seg in segments
+    ]
+    segments = [resample_line(line, 30) for line in segments]
+
     if obstruction_path and Path(obstruction_path).exists():
         logger.info(
             "Loading obstruction database: %s",
             obstruction_path,
         )
 
-        obstruction_points = load_obstructions(obstruction_path)
+        obstruction_points = load_obstructions(obstruction_path, utm_crs)
 
         segments = cut_at_obstructions(
             segments,
@@ -183,6 +190,18 @@ def run_pipeline(
         pivot_nodes,
     )
     segments = swordle.explode_lines(segments)
+    segments = [
+        {
+            **seg,
+            "geometry": swordle.reproject_geometry(
+                seg["geometry"],
+                utm_crs,
+                "EPSG:4326",
+            ),
+        }
+        for seg in segments
+    ]
+
     segments = swordle.orient_reaches_downstream_to_upstream(
         segments,
         downstream_reach,

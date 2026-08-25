@@ -4,24 +4,32 @@ import pandas as pd
 from shapely.ops import linemerge
 
 
-def load_obstructions(csv_path):
+import geopandas as gpd
+
+
+def load_obstructions(csv_path, utm_crs):
 
     df = pd.read_csv(csv_path)
 
-    return [
-        Point(x, y)
-        for x, y in zip(
+    gdf = gpd.GeoDataFrame(
+        df,
+        geometry=gpd.points_from_xy(
             df["Longitude"],
             df["Latitude"],
-        )
-    ]
+        ),
+        crs="EPSG:4326",
+    )
+
+    gdf = gdf.to_crs(utm_crs)
+
+    return list(gdf.geometry)
 
 
 def cut_at_obstructions(
     segments,
     obstruction_points,
-    buffer_deg=0.00009,  # ~10 m
-    cut_deg=0.0018,  # ~200 m
+    buffer_deg=10,  # ~10 m
+    cut_deg=200,  # ~200 m
 ):
     """
     Split segments around obstruction points.
@@ -135,7 +143,7 @@ def cut_at_obstructions(
 
 def split_long_lines(
     segments,
-    max_length_deg=0.27,
+    max_length_deg=10000,  # 10km
 ):
     """
     Split long segments while preserving
@@ -195,33 +203,13 @@ def split_long_lines(
 def merge_short_reaches(
     segments,
     pivot_nodes,
-    min_length_deg=0.00135,  # ~150 m
+    min_length=150.0,
     tolerance=1e-6,
 ):
     """
-    Merge reaches shorter than approximately 150 m,
-    except when they are connected through a pivot node
-    or contain an obstruction.
-
-    Parameters
-    ----------
-    segments : list[dict]
-        List of segments.
-
-    pivot_nodes : list[tuple]
-        Pivot node coordinates.
-
-    min_length_deg : float
-        Approximate minimum reach length in degrees.
-        150 m ≈ 0.00135°.
-
-    tolerance : float
-        Distance tolerance used to identify pivot nodes.
-
-    Returns
-    -------
-    list[dict]
-        Updated segments.
+    Merge reaches shorter than min_length with
+    the next reach, except when connected through
+    a pivot node or containing an obstruction.
     """
 
     if len(segments) <= 1:
@@ -229,40 +217,54 @@ def merge_short_reaches(
 
     pivot_points = [Point(pivot) for pivot in pivot_nodes]
 
-    merged_segments = [segments[0]]
+    merged_segments = []
+    i = 0
 
-    for segment in segments[1:]:
-        geom = segment["geometry"]
+    while i < len(segments):
+        current = segments[i]
+        current_geom = current["geometry"]
 
-        if geom.length >= min_length_deg or segment["has_obstruction"]:
-            merged_segments.append(segment)
+        # Dernier segment : on le garde
+        if i == len(segments) - 1:
+            merged_segments.append(current)
+            break
 
+        # Cas où le segment est suffisamment long
+        if current_geom.length >= min_length or current["has_obstruction"]:
+            merged_segments.append(current)
+            i += 1
             continue
 
-        previous = merged_segments[-1]
+        next_segment = segments[i + 1]
 
-        shared_point = Point(previous["geometry"].coords[-1])
+        shared_point = Point(current_geom.coords[-1])
 
         is_pivot = any(
             shared_point.distance(pivot) < tolerance for pivot in pivot_points
         )
 
         if is_pivot:
-            merged_segments.append(segment)
-
+            merged_segments.append(current)
+            i += 1
             continue
 
         merged_geom = linemerge(
             [
-                previous["geometry"],
-                geom,
+                current_geom,
+                next_segment["geometry"],
             ]
         )
 
-        previous["geometry"] = merged_geom
-
-        previous["has_obstruction"] = (
-            previous["has_obstruction"] or segment["has_obstruction"]
+        merged_segments.append(
+            {
+                **next_segment,
+                "geometry": merged_geom,
+                "has_obstruction": (
+                    current["has_obstruction"] or next_segment["has_obstruction"]
+                ),
+            }
         )
+
+        i += 2
 
     return merged_segments

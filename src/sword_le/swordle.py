@@ -22,9 +22,8 @@
 import logging
 import math
 from collections import Counter, deque
-import matplotlib.pyplot as plt
-import numpy as np
-import pyproj
+from pyproj import Transformer
+from shapely.ops import transform
 
 from geopy.distance import distance, lonlat
 from shapely.geometry import (
@@ -35,9 +34,26 @@ from shapely.geometry import (
     mapping,
     shape,
 )
-from shapely.ops import linemerge, snap, split, transform, unary_union
+from shapely.ops import linemerge, snap, split
 
 logger = logging.getLogger("swordle")
+
+
+def reproject_geometry(
+    geom,
+    source_crs,
+    target_crs,
+):
+    transformer = Transformer.from_crs(
+        source_crs,
+        target_crs,
+        always_xy=True,
+    )
+
+    return transform(
+        transformer.transform,
+        geom,
+    )
 
 
 def create_nodes(reaches, default_attributes, spacing=200.0):
