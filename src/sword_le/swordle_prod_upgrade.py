@@ -26,18 +26,8 @@ Version : Python  3.10
 
 Description :
 SWORDLE pipeline (Selection, SWORD correction, and shapefile export).
-Output (shapefiles) :
- - test_rep_masked_out.shp
- - test_rep_masked_in.shp
- - test_src_masked_out.shp
- - test_points.shp
- - test_src_up_reach.shp
- - test_src_dw_reach.shp
- - test_rep_keeped.shp
- - test_src_keeped.shp
- - test_new_up_reach.shp
- - test_new_dw_reach.shp
- - test_complete.shp
+Output (gpkg) :
+sword.gpkg
 """
 
 import argparse
@@ -74,108 +64,10 @@ def ensure_dir(path: str):
         Path(path).mkdir(parents=True, exist_ok=True)
 
 
-def load_first_geometry(replacement_path: str, margin=0.001):
-    """
-    Load a reduced bounding box.
-
-    margin is removed from each side.
-    """
-
-    with fiona.open(replacement_path, "r") as src:
-        xmin, ymin, xmax, ymax = src.bounds
-
-    bbox = box(
-        xmin,
-        ymin,
-        xmax,
-        ymax,
-    )
-
-    return bbox
-
-
 def read_default_attributes(json_path: str) -> dict:
     """Read default attributes."""
     with open(json_path, encoding="utf-8") as fin:
         return json.load(fin)
-
-
-def _extract_geom_and_props(feature):
-    """
-    Return (geometry_mapping, properties) from heterogeneous input :
-      - dict Fiona (Feature ou geometry)
-      - objet avec __geo_interface__ (Feature ou geometry)
-      - Shapely geometry
-    """
-    # Dict Fiona
-    if isinstance(feature, dict):
-        if feature.get("type") == "Feature" and "geometry" in feature:
-            geom_mapping = feature["geometry"]
-            props = feature.get("properties", {})
-        elif "geometry" in feature:
-            geom_mapping = feature["geometry"]
-            props = feature.get("properties", {})
-        else:
-            # Mapping direct geometry
-            geom_mapping = feature
-            props = {}
-        return mapping(shape(geom_mapping)), props
-
-    # Object GeoPython with __geo_interface__
-    if hasattr(feature, "__geo_interface__"):
-        gi = feature.__geo_interface__
-        if gi.get("type") == "Feature":
-            geom_mapping = gi["geometry"]
-            props = gi.get("properties", {})
-        else:
-            geom_mapping = gi
-            props = getattr(feature, "properties", {})
-        return mapping(shape(geom_mapping)), props
-
-    # Shapely Geometry
-    try:
-        return mapping(feature), getattr(feature, "properties", {})
-    except Exception as exc:
-        raise TypeError(
-            f"Unsupported feature type for Fiona writing: {type(feature)}"
-        ) from exc
-
-
-def adapt_feature(feature, schema, default_attributes):
-    """
-    Adapt a feature to the output schema/CRS :
-      - normalized geometry (mapping GeoJSON)
-      - properties restricted to schema keys, filled with default values
-    """
-    geom, props_src = _extract_geom_and_props(feature)
-    props_out = {
-        key: props_src.get(key, default_attributes.get(key, None))
-        for key in schema["properties"].keys()
-    }
-    return {"geometry": geom, "properties": props_out}
-
-
-def _geom_equals(a, b, tol: float = 0.0) -> bool:
-    """
-    Compare geometric equality between two non-identical features
-    - tol: Tolerance for equals_exact (0.0 by défaut), fallback to topological equals.
-    """
-    try:
-        ga, _ = _extract_geom_and_props(a)
-        gb, _ = _extract_geom_and_props(b)
-        sa = shape(ga)
-        sb = shape(gb)
-        return sa.equals_exact(sb, tol) or sa.equals(sb)
-    except Exception:
-        return False
-
-
-def write_features(path, features, schema, crs, default_attributes):
-    """Write a list of features to a shapefile according to a given schema/CRS."""
-    ensure_dir(os.path.dirname(path))
-    with fiona.open(path, "w", driver="ESRI Shapefile", crs=crs, schema=schema) as fout:
-        for feature in features:
-            fout.write(adapt_feature(feature, schema, default_attributes))
 
 
 # ========================================================================================
