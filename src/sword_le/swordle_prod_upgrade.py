@@ -77,10 +77,8 @@ def read_default_attributes(json_path: str) -> dict:
 
 def run_pipeline(
     sword_path: str,
-    logic: str,
     replacement_path: str,
     obstruction_path: str,
-    default_attr_path: str,
     results_dir: str,
 ):
     """Run pipeline"""
@@ -97,8 +95,6 @@ def run_pipeline(
     rep = fiona.open(replacement_path, "r")
     logger.info("Element replacement: %d", len(rep))
 
-    logger.info("Loading default attributes: %s", default_attr_path)
-    _ = read_default_attributes(default_attr_path)
     intersected_reaches = swordle.find_intersected_reaches(
         src,
         rep,
@@ -163,6 +159,7 @@ def run_pipeline(
         geometry=segments,
         crs="EPSG:4326",
     ).estimate_utm_crs()
+
     segments = [
         swordle.reproject_geometry(seg, "EPSG:4326", utm_crs) for seg in segments
     ]
@@ -190,6 +187,21 @@ def run_pipeline(
         pivot_nodes,
     )
     segments = swordle.explode_lines(segments)
+
+    segments, new_reaches = generate_reaches_id(
+        upstream_reach["properties"]["reach_id"],
+        segments,
+    )
+    add_new_reaches_to_json(
+        metadata_json,
+        new_reaches,
+    )
+
+    # nodes_gdf = create_nodes_on_replacement_reaches(
+    #    segments,
+    #    spacing=200.0,
+    # )
+
     segments = [
         {
             **seg,
@@ -206,20 +218,6 @@ def run_pipeline(
         segments,
         downstream_reach,
     )
-
-    segments, new_reaches = generate_reaches_id(
-        upstream_reach["properties"]["reach_id"],
-        segments,
-    )
-    add_new_reaches_to_json(
-        metadata_json,
-        new_reaches,
-    )
-
-    # nodes_gdf = create_nodes_on_replacement_reaches(
-    #    segments,
-    #    spacing=200.0,
-    # )
 
     # nodes_gdf.to_file(
     #    Path(results_dir) / "replacement_nodes.gpkg",
@@ -250,13 +248,6 @@ def build_arg_parser():
     )
     p.add_argument("--sword", required=True, help="Shapefile SWORD (reaches)")
     p.add_argument(
-        "--logic",
-        required=False,
-        choices=["1", "2"],
-        default="2",
-        help="Choice of logic for upstream/downstream selection (1 or 2). Default : 2.",
-    )
-    p.add_argument(
         "--obs_bd",
         required=False,
         default=None,
@@ -264,11 +255,6 @@ def build_arg_parser():
     )
     p.add_argument(
         "--replacement", required=True, help="Shapefile replacement (TOPAGE)"
-    )
-    p.add_argument(
-        "--default-attributes",
-        required=True,
-        help="JSON default attributes",
     )
     p.add_argument("--results", required=True, help="Output folder for shapefiles.")
     p.add_argument(
@@ -292,7 +278,6 @@ def main():
     for label, path in (
         ("sword", args.sword),
         ("replacement", args.replacement),
-        ("default-attributes", args.default_attributes),
     ):
         if not Path(path).exists():
             logging.error("The specified path for --%s doesn't exist : %s", label, path)
@@ -301,10 +286,8 @@ def main():
     try:
         run_pipeline(
             sword_path=args.sword,
-            logic=args.logic,
             replacement_path=args.replacement,
             obstruction_path=args.obs_bd,
-            default_attr_path=args.default_attributes,
             results_dir=args.results.rstrip(os.sep) + os.sep,
         )
     except Exception as e:
