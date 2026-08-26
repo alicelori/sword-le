@@ -79,6 +79,7 @@ def read_default_attributes(json_path: str) -> dict:
 
 def run_pipeline(
     sword_path: str,
+    sword_nodes: str,
     replacement_path: str,
     obstruction_path: str,
     results_dir: str,
@@ -92,6 +93,9 @@ def run_pipeline(
 
     logger.info("Loading source (SWORD reaches): %s", sword_path)
     src = fiona.open(sword_path, "r")
+
+    logger.info("Loading source (SWORD nodes): %s", sword_nodes)
+    src_nodes = fiona.open(sword_nodes, "r")
 
     logger.info("Loading replacement (TOPAGE): %s", replacement_path)
     rep = fiona.open(replacement_path, "r")
@@ -233,6 +237,7 @@ def run_pipeline(
         utm_crs,
         spacing=200.0,
     )
+    nodes_gdf = nodes_gdf.to_crs(4326)
 
     add_new_nodes_to_json(
         metadata_json,
@@ -251,11 +256,6 @@ def run_pipeline(
         for seg in segments
     ]
 
-    nodes_gdf.to_file(
-        Path(results_dir) / "replacement_nodes.gpkg",
-        driver="GPKG",
-    )
-
     gdf = rebuild_sword_network(
         sword_features=src,
         replaced_ids=replaced_reach_ids,
@@ -264,6 +264,16 @@ def run_pipeline(
 
     gdf.to_file(
         Path(results_dir) / "sword.gpkg",
+        driver="GPKG",
+    )
+    gdf_nodes = rebuild_sword_network(
+        sword_features=src_nodes,
+        replaced_ids=replaced_reach_ids,
+        final_geometry=nodes_gdf,
+    )
+
+    gdf_nodes.to_file(
+        Path(results_dir) / "sword_nodes.gpkg",
         driver="GPKG",
     )
 
@@ -279,6 +289,7 @@ def build_arg_parser():
         description="SWORDLE pipeline (Selection, SWORD correction, and shapefile export)"
     )
     p.add_argument("--sword", required=True, help="Shapefile SWORD (reaches)")
+    p.add_argument("--sword_nodes", required=True, help="Shapefile SWORD (nodes)")
     p.add_argument(
         "--obs_bd",
         required=False,
@@ -309,6 +320,7 @@ def main():
     # Check paths
     for label, path in (
         ("sword", args.sword),
+        ("sword_nodes", args.sword_nodes),
         ("replacement", args.replacement),
     ):
         if not Path(path).exists():
@@ -318,6 +330,7 @@ def main():
     try:
         run_pipeline(
             sword_path=args.sword,
+            sword_nodes=args.sword_nodes,
             replacement_path=args.replacement,
             obstruction_path=args.obs_bd,
             results_dir=args.results.rstrip(os.sep) + os.sep,
