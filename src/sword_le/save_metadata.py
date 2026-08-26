@@ -184,3 +184,18 @@ def add_new_reaches_to_json(
             f,
             indent=4,
         )
+
+
+def add_new_nodes_to_json(
+    json_file,
+    nodes_gdf,
+):
+    json_file = Path(json_file)
+
+    with json_file.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    data["new_nodes"] = nodes_gdf[["node_id", "reach_id"]].to_dict("records")
+
+    with json_file.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)

@@ -44,6 +44,7 @@ from save_metadata import (
     find_replaced_reaches,
     save_boundary_reaches,
     add_new_reaches_to_json,
+    add_new_nodes_to_json,
 )
 from sword_segmentation import (
     split_long_lines,
@@ -199,7 +200,10 @@ def run_pipeline(
     )
 
     nodes_gdf = create_nodes_on_reach(segments, utm_crs, spacing=200.0)
-
+    add_new_nodes_to_json(
+        metadata_json,
+        nodes_gdf,
+    )
     segments = [
         {
             **seg,
