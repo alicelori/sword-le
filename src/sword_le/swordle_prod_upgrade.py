@@ -199,11 +199,6 @@ def run_pipeline(
         new_reaches,
     )
 
-    nodes_gdf = create_nodes_on_reach(segments, utm_crs, spacing=200.0)
-    add_new_nodes_to_json(
-        metadata_json,
-        nodes_gdf,
-    )
     segments = [
         {
             **seg,
@@ -220,6 +215,41 @@ def run_pipeline(
         segments,
         downstream_reach,
     )
+
+    segments = [
+        {
+            **seg,
+            "geometry": swordle.reproject_geometry(
+                seg["geometry"],
+                "EPSG:4326",
+                utm_crs,
+            ),
+        }
+        for seg in segments
+    ]
+
+    nodes_gdf = create_nodes_on_reach(
+        segments,
+        utm_crs,
+        spacing=200.0,
+    )
+
+    add_new_nodes_to_json(
+        metadata_json,
+        nodes_gdf,
+    )
+
+    segments = [
+        {
+            **seg,
+            "geometry": swordle.reproject_geometry(
+                seg["geometry"],
+                utm_crs,
+                "EPSG:4326",
+            ),
+        }
+        for seg in segments
+    ]
 
     nodes_gdf.to_file(
         Path(results_dir) / "replacement_nodes.gpkg",
