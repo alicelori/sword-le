@@ -51,6 +51,7 @@ from sword_segmentation import (
     load_obstructions,
     merge_short_reaches,
 )
+from create_nodes import create_nodes_on_reach
 from reconstruct_sword import rebuild_sword_network
 from tools.geom_utils import resample_line
 # ========================================================================================
@@ -197,10 +198,7 @@ def run_pipeline(
         new_reaches,
     )
 
-    # nodes_gdf = create_nodes_on_replacement_reaches(
-    #    segments,
-    #    spacing=200.0,
-    # )
+    nodes_gdf = create_nodes_on_reach(segments, utm_crs, spacing=200.0)
 
     segments = [
         {
@@ -219,10 +217,10 @@ def run_pipeline(
         downstream_reach,
     )
 
-    # nodes_gdf.to_file(
-    #    Path(results_dir) / "replacement_nodes.gpkg",
-    #    driver="GPKG",
-    # )
+    nodes_gdf.to_file(
+        Path(results_dir) / "replacement_nodes.gpkg",
+        driver="GPKG",
+    )
 
     gdf = rebuild_sword_network(
         sword_features=src,
