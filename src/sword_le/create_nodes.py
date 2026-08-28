@@ -34,20 +34,19 @@ def create_nodes_on_reach(
         geom = segment["geometry"]
 
         length = geom.length
+        useful_length = length - 200.0
 
-        distances = []
-        distance = 100.0
+        if useful_length <= 0:
+            continue
 
-        while distance < length:
-            distances.append(distance)
-            distance += spacing
+        n_intervals = max(1, round(useful_length / spacing))
+        real_spacing = useful_length / n_intervals
+
+        distances = [100.0 + i * real_spacing for i in range(n_intervals + 1)]
 
         node_ids = []
 
-        # distances déjà triées aval -> amont
-        for dist in distances:
-            node_order = int((dist - 100.0) / spacing) + 1
-
+        for node_order, dist in enumerate(distances, start=1):
             node = build_node(
                 reach_id=reach_id,
                 node_order=node_order,
