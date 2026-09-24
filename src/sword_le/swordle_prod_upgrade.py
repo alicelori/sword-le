@@ -19,15 +19,16 @@
 
 """
 Author : Abderrahmane AICHE (CS GROUP)
+         Alice Lorillou
 Date : 23/01/2026
-''Adjusting script for new logic functions : find_upstream_downstream_reaches_using_mask''
 
 Version : Python  3.10
 
 Description :
 SWORDLE pipeline (Selection, SWORD correction, and shapefile export).
 Output (gpkg) :
-sword.gpkg
+    - sword.gpkg
+    - sword_nodes.gpkg
 """
 
 import argparse
@@ -106,6 +107,7 @@ def run_pipeline(
 
     logger.info("Loading replacement (TOPAGE): %s", replacement_path)
     rep = fiona.open(replacement_path, "r")
+
     logger.info("Element replacement: %d", len(rep))
 
     intersected_reaches = swordle.find_intersected_reaches(
@@ -159,7 +161,6 @@ def run_pipeline(
         replacement_part,
         downstream_part,
     )
-
     segments = swordle.split_at_nodes(
         final_geometry,
         tolerance=1e-5,
@@ -199,7 +200,6 @@ def run_pipeline(
         segments,
         pivot_nodes,
     )
-    segments = swordle.explode_lines(segments)
 
     segments, new_reaches = generate_reaches_id(
         upstream_reach["properties"]["reach_id"],
@@ -210,49 +210,20 @@ def run_pipeline(
         new_reaches,
     )
 
-    segments = [
-        {
-            **seg,
-            "geometry": swordle.reproject_geometry(
-                seg["geometry"],
-                utm_crs,
-                "EPSG:4326",
-            ),
-        }
-        for seg in segments
-    ]
-
     p_downstream_reach = downstream_reach.geometry.coordinates[0]
-    utm = Transformer.from_crs(4326, utm_crs, always_xy=True).transform(
+    p_downstream_reach = Transformer.from_crs(4326, utm_crs, always_xy=True).transform(
         *p_downstream_reach
-    )
-    p_downstream_reach = Transformer.from_crs(utm_crs, 4326, always_xy=True).transform(
-        *utm
     )
 
     p_upstream_reach = upstream_reach.geometry.coordinates[-1]
-    utm = Transformer.from_crs(4326, utm_crs, always_xy=True).transform(
+    p_upstream_reach = Transformer.from_crs(4326, utm_crs, always_xy=True).transform(
         *p_upstream_reach
     )
-    p_upstream_reach = Transformer.from_crs(utm_crs, 4326, always_xy=True).transform(
-        *utm
-    )
+
     paths = get_all_paths(segments, p_downstream_reach, p_upstream_reach)
 
     orientation = get_reach_orientation(paths)
     segments = reorient_reaches(segments, orientation)
-
-    segments = [
-        {
-            **seg,
-            "geometry": swordle.reproject_geometry(
-                seg["geometry"],
-                "EPSG:4326",
-                utm_crs,
-            ),
-        }
-        for seg in segments
-    ]
 
     nodes_gdf = create_nodes_on_reach(
         segments,
