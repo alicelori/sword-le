@@ -21,9 +21,10 @@
 
 import logging
 import math
-from collections import Counter, deque
+from collections import Counter
 from pyproj import Transformer
 from shapely.ops import transform
+
 
 from geopy.distance import distance, lonlat
 from shapely.geometry import (
@@ -958,113 +959,3 @@ def merge_non_pivot_segments(
         merged,
         pivot_nodes,
     )
-
-
-def same_point(
-    p1,
-    p2,
-    precision=10,
-):
-    return round(p1[0], precision) == round(p2[0], precision) and round(
-        p1[1], precision
-    ) == round(p2[1], precision)
-
-
-def orient_reaches_downstream_to_upstream(
-    segments,
-    downstream_reach,
-):
-    """
-    Orient replacement reaches from downstream
-    to upstream.
-
-    Parameters
-    ----------
-    segments : list[dict]
-
-    downstream_reach : dict
-
-    Returns
-    -------
-    list[dict]
-    """
-
-    if not segments:
-        return []
-
-    downstream_geom = shape(downstream_reach["geometry"])
-
-    downstream_point = tuple(downstream_geom.coords[0])
-
-    remaining = list(segments)
-
-    oriented = []
-
-    points_to_process = deque([downstream_point])
-
-    while points_to_process:
-        current_point = points_to_process.popleft()
-
-        matched = []
-
-        for i, segment in enumerate(remaining):
-            geom = shape(segment["geometry"])
-
-            start_point = tuple(geom.coords[0])
-
-            end_point = tuple(geom.coords[-1])
-
-            if same_point(
-                start_point,
-                current_point,
-            ):
-                matched.append(
-                    (
-                        i,
-                        {
-                            **segment,
-                            "geometry": geom,
-                        },
-                    )
-                )
-
-            elif same_point(
-                end_point,
-                current_point,
-            ):
-                matched.append(
-                    (
-                        i,
-                        {
-                            **segment,
-                            "geometry": LineString(list(geom.coords)[::-1]),
-                        },
-                    )
-                )
-
-        for i, segment in sorted(
-            matched,
-            key=lambda x: x[0],
-            reverse=True,
-        ):
-            remaining.pop(i)
-
-            oriented.append(segment)
-
-            points_to_process.append(tuple(segment["geometry"].coords[-1]))
-
-    if remaining:
-        print(f"{len(remaining)} segments non orientés :")
-
-        for segment in remaining:
-            geom = shape(segment["geometry"])
-
-            print(
-                tuple(geom.coords[0]),
-                "->",
-                tuple(geom.coords[-1]),
-            )
-
-        raise RuntimeError(f"{len(remaining)} reach(es) could not be oriented.")
-
-    return oriented

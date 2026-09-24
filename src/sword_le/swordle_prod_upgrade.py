@@ -38,6 +38,7 @@ import sys
 import fiona
 import geopandas as gpd
 from pathlib import Path
+from pyproj import Transformer
 from sword_le import swordle
 from generate_id import generate_reaches_id
 from save_metadata import (
@@ -55,6 +56,12 @@ from sword_segmentation import (
 from create_nodes import create_nodes_on_reach
 from reconstruct_sword import rebuild_sword_network
 from tools.geom_utils import resample_line
+from orient_reaches import (
+    get_all_paths,
+    get_reach_orientation,
+    reorient_reaches,
+)
+
 # ========================================================================================
 # Utility functions for saving ESRI shapefiles
 # ========================================================================================
@@ -215,10 +222,25 @@ def run_pipeline(
         for seg in segments
     ]
 
-    segments = swordle.orient_reaches_downstream_to_upstream(
-        segments,
-        downstream_reach,
+    p_downstream_reach = downstream_reach.geometry.coordinates[0]
+    utm = Transformer.from_crs(4326, utm_crs, always_xy=True).transform(
+        *p_downstream_reach
     )
+    p_downstream_reach = Transformer.from_crs(utm_crs, 4326, always_xy=True).transform(
+        *utm
+    )
+
+    p_upstream_reach = upstream_reach.geometry.coordinates[-1]
+    utm = Transformer.from_crs(4326, utm_crs, always_xy=True).transform(
+        *p_upstream_reach
+    )
+    p_upstream_reach = Transformer.from_crs(utm_crs, 4326, always_xy=True).transform(
+        *utm
+    )
+    paths = get_all_paths(segments, p_downstream_reach, p_upstream_reach)
+
+    orientation = get_reach_orientation(paths)
+    segments = reorient_reaches(segments, orientation)
 
     segments = [
         {
