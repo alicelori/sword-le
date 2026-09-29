@@ -40,28 +40,16 @@ import fiona
 import geopandas as gpd
 from pathlib import Path
 from pyproj import Transformer
-from sword_le import swordle
-from generate_id import generate_reaches_id
-from save_metadata import (
-    find_replaced_reaches,
-    save_boundary_reaches,
-    add_new_reaches_to_json,
-    add_new_nodes_to_json,
-)
-from sword_segmentation import (
-    split_long_lines,
-    cut_at_obstructions,
-    load_obstructions,
-    merge_short_reaches,
-)
-from create_nodes import create_nodes_on_reach
-from reconstruct_sword import rebuild_sword_network
-from tools.geom_utils import resample_line
-from orient_reaches import (
-    get_all_paths,
-    get_reach_orientation,
-    reorient_reaches,
-)
+
+import tools.geom_utils as tools
+import generate_id
+import save_metadata
+import reach_intersection as rch_int
+import reach_segmentation as rch_seg
+import replacement_reconstruction as rep_build
+import node_generation as node_gen
+import reach_orientation as rch_orient
+import final_geometry_reconstruction as geom_build
 
 # ========================================================================================
 # Utility functions for saving ESRI shapefiles
@@ -110,74 +98,80 @@ def run_pipeline(
 
     logger.info("Element replacement: %d", len(rep))
 
-    intersected_reaches = swordle.find_intersected_reaches(
+    logger.info("Get upstream and downstream reaches")
+    intersected_reaches = rch_int.find_intersected_reaches(
         src,
         rep,
     )
     (
         upstream_reach,
         downstream_reach,
-    ) = swordle.find_upstream_downstream_reaches(
+    ) = rch_int.find_upstream_downstream_reaches(
         intersected_reaches,
     )
-    replaced_reach_ids = find_replaced_reaches(src, upstream_reach, downstream_reach)
-    metadata_json = save_boundary_reaches(
+    replaced_reach_ids = save_metadata.find_replaced_reaches(
+        src, upstream_reach, downstream_reach
+    )
+    metadata_json = save_metadata.save_boundary_reaches(
         upstream_reach, downstream_reach, results_dir, replaced_reach_ids
     )
 
-    upstream_intersection_point = swordle.find_upstream_intersection_point(
+    upstream_intersection_point = rch_int.find_upstream_intersection_point(
         upstream_reach,
         rep,
     )
 
-    downstream_intersection_point = swordle.find_downstream_intersection_point(
+    downstream_intersection_point = rch_int.find_downstream_intersection_point(
         downstream_reach,
         rep,
     )
 
-    upstream_part = swordle.keep_upstream_part(
+    upstream_part = rch_int.keep_upstream_part(
         upstream_reach,
         upstream_intersection_point,
     )
 
-    downstream_part = swordle.keep_downstream_part(
+    downstream_part = rch_int.keep_downstream_part(
         downstream_reach,
         downstream_intersection_point,
     )
 
-    replacement_part = swordle.trim_replacement_between_points(
+    replacement_part = rch_int.trim_replacement_between_points(
         rep,
         upstream_intersection_point,
         downstream_intersection_point,
     )
 
-    replacement_part = swordle.insert_pivot_points(
+    replacement_part = rch_int.insert_pivot_points(
         replacement_part,
         upstream_intersection_point,
         downstream_intersection_point,
     )
-    final_geometry = swordle.build_corrected_network(
+
+    logger.info("Replacement geometry reconstruction")
+
+    final_geometry = rep_build.build_corrected_network(
         upstream_part,
         replacement_part,
         downstream_part,
     )
-    segments = swordle.split_at_nodes(
+    segments = rep_build.split_at_nodes(
         final_geometry,
         tolerance=1e-5,
     )
-    segments, pivot_nodes = swordle.merge_non_pivot_segments(segments)
+    segments, pivot_nodes = rep_build.merge_non_pivot_segments(segments)
 
-    segments = swordle.explode_lines(segments)
+    segments = rep_build.explode_lines(segments)
+
+    logger.info("Reach segmentation")
 
     utm_crs = gpd.GeoDataFrame(
         geometry=segments,
         crs="EPSG:4326",
     ).estimate_utm_crs()
 
-    segments = [
-        swordle.reproject_geometry(seg, "EPSG:4326", utm_crs) for seg in segments
-    ]
-    segments = [resample_line(line, 30) for line in segments]
+    segments = [tools.reproject_geometry(seg, "EPSG:4326", utm_crs) for seg in segments]
+    segments = [rch_seg.resample_line(line, 30) for line in segments]
 
     if obstruction_path and Path(obstruction_path).exists():
         logger.info(
@@ -185,9 +179,9 @@ def run_pipeline(
             obstruction_path,
         )
 
-        obstruction_points = load_obstructions(obstruction_path, utm_crs)
+        obstruction_points = rch_seg.load_obstructions(obstruction_path, utm_crs)
 
-        segments = cut_at_obstructions(
+        segments = rch_seg.cut_at_obstructions(
             segments,
             obstruction_points,
         )
@@ -195,17 +189,18 @@ def run_pipeline(
     else:
         logger.info("No obstruction database found. Skipping obstruction processing.")
 
-    segments = split_long_lines(segments)
-    segments = merge_short_reaches(
+    segments = rch_seg.split_long_lines(segments)
+    segments = rch_seg.merge_short_reaches(
         segments,
         pivot_nodes,
     )
 
-    segments, new_reaches = generate_reaches_id(
+    logger.info("Reach segmentation")
+    segments, new_reaches = generate_id.generate_reaches_id(
         upstream_reach["properties"]["reach_id"],
         segments,
     )
-    add_new_reaches_to_json(
+    save_metadata.add_new_reaches_to_json(
         metadata_json,
         new_reaches,
     )
@@ -219,20 +214,23 @@ def run_pipeline(
     p_upstream_reach = Transformer.from_crs(4326, utm_crs, always_xy=True).transform(
         *p_upstream_reach
     )
+    logger.info("Reach orientation")
 
-    paths = get_all_paths(segments, p_downstream_reach, p_upstream_reach)
+    paths = rch_orient.get_all_paths(segments, p_downstream_reach, p_upstream_reach)
 
-    orientation = get_reach_orientation(paths)
-    segments = reorient_reaches(segments, orientation)
+    orientation = rch_orient.get_reach_orientation(paths)
+    segments = rch_orient.reorient_reaches(segments, orientation)
 
-    nodes_gdf = create_nodes_on_reach(
+    logger.info("Node generation")
+
+    nodes_gdf = node_gen.create_nodes_on_reach(
         segments,
         utm_crs,
         spacing=200.0,
     )
     nodes_gdf = nodes_gdf.to_crs(4326)
 
-    add_new_nodes_to_json(
+    save_metadata.add_new_nodes_to_json(
         metadata_json,
         nodes_gdf,
     )
@@ -240,7 +238,7 @@ def run_pipeline(
     segments = [
         {
             **seg,
-            "geometry": swordle.reproject_geometry(
+            "geometry": tools.reproject_geometry(
                 seg["geometry"],
                 utm_crs,
                 "EPSG:4326",
@@ -249,7 +247,7 @@ def run_pipeline(
         for seg in segments
     ]
 
-    gdf = rebuild_sword_network(
+    gdf = geom_build.rebuild_sword_network(
         sword_features=src,
         replaced_ids=replaced_reach_ids,
         final_geometry=segments,
@@ -259,7 +257,7 @@ def run_pipeline(
         Path(results_dir) / "sword.gpkg",
         driver="GPKG",
     )
-    gdf_nodes = rebuild_sword_network(
+    gdf_nodes = geom_build.rebuild_sword_network(
         sword_features=src_nodes,
         replaced_ids=replaced_reach_ids,
         final_geometry=nodes_gdf,

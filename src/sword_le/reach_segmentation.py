@@ -1,10 +1,38 @@
+#!/usr/bin/env python3
+# Copyright (c) CS GROUP 2026
+#
+# This file is part of the sword-le project:
+#  https://github.com/csgroup-oss/sword-le
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+#
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+
+from shapely import line_interpolate_point
+from shapely.geometry import LineString
 from shapely.geometry import Point
 from shapely.ops import substring
-import pandas as pd
 from shapely.ops import linemerge
 
 
-import geopandas as gpd
+def resample_line(line, step):
+    distances = np.arange(0, line.length, step)
+    distances = np.append(distances, line.length)
+
+    return LineString([line_interpolate_point(line, d).coords[0] for d in distances])
 
 
 def load_obstructions(csv_path, utm_crs):
