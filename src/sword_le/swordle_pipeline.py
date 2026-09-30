@@ -49,6 +49,7 @@ import reach_segmentation as rch_seg
 import replacement_reconstruction as rep_build
 import node_generation as node_gen
 import reach_orientation as rch_orient
+import reach_connectivity as rch_con
 import final_geometry_reconstruction as geom_build
 
 # ========================================================================================
@@ -220,6 +221,21 @@ def run_pipeline(
 
     orientation = rch_orient.get_reach_orientation(paths)
     segments = rch_orient.reorient_reaches(segments, orientation)
+
+    logger.info("Reach connectivity")
+    gdf_reaches = gpd.GeoDataFrame(segments, geometry="geometry").set_index("reach_id")
+
+    gdf_reaches = rch_con.add_reach_connectivity(gdf_reaches, orientation)
+    connectivity = rch_con.compute_reach_connectivity(orientation)
+
+    connectivity = rch_con.reconnect_connectivity(
+        connectivity,
+        upstream_reach,
+        downstream_reach,
+        paths[0][-2],
+        paths[0][1],
+    )
+    save_metadata.add_connectivity_to_json(metadata_json, connectivity)
 
     logger.info("Node generation")
 

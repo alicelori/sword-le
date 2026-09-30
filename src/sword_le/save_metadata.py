@@ -199,3 +199,23 @@ def add_new_nodes_to_json(
 
     with json_file.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
+
+
+def add_connectivity_to_json(
+    json_file,
+    connectivity,
+):
+    json_file = Path(json_file)
+
+    with json_file.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    data["connectivity"] = connectivity
+
+    with json_file.open("w", encoding="utf-8") as f:
+        json.dump(
+            data,
+            f,
+            indent=4,
+            ensure_ascii=False,
+        )
