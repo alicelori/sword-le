@@ -24,12 +24,13 @@ from shapely.geometry import (
     shape,
 )
 from shapely.ops import snap, split
-import replacement_reconstruction as rep
+import sword_le.geom_tool.replacement_reconstruction as rep
 
+import logging
 
 def find_intersected_reaches(
-    sword_features,
-    replacement_features,
+    sword_gdf,
+    replacement_gdf,
 ):
     """
     Find all SWORD reaches intersecting the
@@ -37,32 +38,25 @@ def find_intersected_reaches(
 
     Parameters
     ----------
-    sword_features : list[dict]
-        SWORD GeoJSON features.
+    sword_gdf : geopandas.GeoDataFrame
+        SWORD reaches.
 
-    replacement_features : list[dict]
-        Replacement GeoJSON features.
+    replacement_gdf : geopandas.GeoDataFrame
+        Replacement reaches.
 
     Returns
     -------
-    list[dict]
+    geopandas.GeoDataFrame
         Intersected SWORD reaches.
     """
 
     logging.info("Searching for intersected SWORD reaches")
 
-    intersected_reaches = []
+    replacement_union = replacement_gdf.geometry.union_all()
 
-    for sword_feature in sword_features:
-        sword_geom = shape(sword_feature["geometry"])
-
-        for replacement_feature in replacement_features:
-            replacement_geom = shape(replacement_feature["geometry"])
-
-            if sword_geom.intersects(replacement_geom):
-                intersected_reaches.append(sword_feature)
-
-                break
+    intersected_reaches = sword_gdf.loc[
+        sword_gdf.geometry.intersects(replacement_union)
+    ].copy()
 
     logging.info(
         "Found %s intersected reaches",
@@ -71,42 +65,23 @@ def find_intersected_reaches(
 
     return intersected_reaches
 
-
 def find_upstream_downstream_reaches(
     intersected_reaches,
 ):
     """
     Identify upstream and downstream reaches
     among intersected reaches.
-
-    Upstream reach is the feature with the
-    maximum dist_out value.
-
-    Downstream reach is the feature with the
-    minimum dist_out value.
-
-    Parameters
-    ----------
-    intersected_reaches : list[dict]
-
-    Returns
-    -------
-    tuple(dict, dict)
-        upstream_reach,
-        downstream_reach
     """
 
     logging.info("Finding upstream and downstream reaches")
 
-    upstream_reach = max(
-        intersected_reaches,
-        key=lambda f: f["properties"]["dist_out"],
-    )
+    upstream_reach = intersected_reaches.loc[
+        intersected_reaches["dist_out"].idxmax()
+    ]
 
-    downstream_reach = min(
-        intersected_reaches,
-        key=lambda f: f["properties"]["dist_out"],
-    )
+    downstream_reach = intersected_reaches.loc[
+        intersected_reaches["dist_out"].idxmin()
+    ]
 
     logging.info("Selected upstream and downstream reaches")
 
@@ -115,40 +90,29 @@ def find_upstream_downstream_reaches(
         downstream_reach,
     )
 
-
 def find_upstream_intersection_point(
     upstream_reach,
-    replacement_features,
+    replacement_gdf,
 ):
     """
     Find the upstream-most intersection point
     between the upstream reach and the
     replacement network.
-
-    Parameters
-    ----------
-    upstream_reach : dict
-        SWORD reach.
-
-    replacement_features : list[dict]
-        Replacement GeoJSON features.
-
-    Returns
-    -------
-    Point
-        Upstream intersection point.
     """
 
     logging.info("Searching upstream intersection point")
 
-    reach_geom = shape(upstream_reach["geometry"])
+    reach_geom = upstream_reach.geometry
 
     points = []
 
-    for replacement_feature in replacement_features:
-        replacement_geom = shape(replacement_feature["geometry"])
+    for _, replacement_feature in replacement_gdf.iterrows():
 
-        inter = reach_geom.intersection(replacement_geom)
+        replacement_geom = replacement_feature.geometry
+
+        inter = reach_geom.intersection(
+            replacement_geom
+        )
 
         if inter.is_empty:
             continue
@@ -160,7 +124,9 @@ def find_upstream_intersection_point(
             points.extend(inter.geoms)
 
     if not points:
-        raise ValueError("No upstream intersection point found.")
+        raise ValueError(
+            "No upstream intersection point found."
+        )
 
     point = max(
         points,
@@ -175,20 +141,22 @@ def find_upstream_intersection_point(
 
     return point
 
-
 def find_downstream_intersection_point(
     downstream_reach,
-    replacement_features,
+    replacement_gdf,
 ):
 
-    reach_geom = shape(downstream_reach["geometry"])
+    reach_geom = downstream_reach.geometry
 
     points = []
 
-    for replacement_feature in replacement_features:
-        replacement_geom = shape(replacement_feature["geometry"])
+    for _, replacement_feature in replacement_gdf.iterrows():
 
-        inter = reach_geom.intersection(replacement_geom)
+        replacement_geom = replacement_feature.geometry
+
+        inter = reach_geom.intersection(
+            replacement_geom
+        )
 
         if inter.is_empty:
             continue
@@ -200,13 +168,14 @@ def find_downstream_intersection_point(
             points.extend(inter.geoms)
 
     if not points:
-        raise ValueError("No downstream intersection point found.")
+        raise ValueError(
+            "No downstream intersection point found."
+        )
 
     return min(
         points,
         key=lambda p: reach_geom.project(p),
     )
-
 
 def keep_upstream_part(
     reach,
@@ -319,7 +288,7 @@ def keep_downstream_part(
 
 
 def trim_replacement_between_points(
-    replacement_features,
+    replacement_gdf,
     upstream_point,
     downstream_point,
 ):
@@ -353,10 +322,13 @@ def trim_replacement_between_points(
 
     lines = []
 
-    for feature in replacement_features:
-        geom = shape(feature["geometry"])
+    for _, feature in replacement_gdf.iterrows():
 
-        lines.extend(rep.explode_lines(geom))
+        geom = feature.geometry
+
+        lines.extend(
+            rep.explode_lines(geom)
+        )
 
     output_lines = []
 

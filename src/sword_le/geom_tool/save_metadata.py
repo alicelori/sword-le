@@ -1,73 +1,69 @@
+#!/usr/bin/env python3
+# Copyright (c) 2026 CS GROUP France
+#
+# This file is part of the sword-le project:
+#  https://github.com/csgroup-oss/sword-le
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+#
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 from pathlib import Path
 from shapely.geometry import shape
 from shapely.geometry import Point
 
-
 def find_replaced_reaches(
-    sword_features,
+    sword_gdf,
     upstream_reach,
     downstream_reach,
     tolerance=1e-5,
 ):
-    """
-    Find all reach IDs located between the
-    downstream and upstream reaches.
-
-    The search follows the network by moving
-    from one connected reach to the next.
-
-    Parameters
-    ----------
-    sword_features : list[dict]
-
-    upstream_reach : dict
-
-    downstream_reach : dict
-
-    tolerance : float
-
-    Returns
-    -------
-    list
-        Reach IDs located between downstream
-        and upstream reaches (included).
-    """
-
-    upstream_id = upstream_reach["properties"]["reach_id"]
+    upstream_id = upstream_reach["reach_id"]
 
     current = downstream_reach
 
     replaced_ids = []
-
     visited = set()
 
     while True:
-        current_id = current["properties"]["reach_id"]
+
+        current_id = current["reach_id"]
 
         if current_id in visited:
             break
 
         visited.add(current_id)
-
         replaced_ids.append(current_id)
 
         if current_id == upstream_id:
             break
 
-        current_geom = shape(current["geometry"])
+        current_geom = current.geometry
 
-        current_upstream_node = Point(current_geom.coords[-1])
+        current_upstream_node = Point(
+            current_geom.coords[-1]
+        )
 
         next_reach = None
 
-        for candidate in sword_features:
-            candidate_id = candidate["properties"]["reach_id"]
+        for _, candidate in sword_gdf.iterrows():
+
+            candidate_id = candidate["reach_id"]
 
             if candidate_id in visited:
                 continue
 
-            candidate_geom = shape(candidate["geometry"])
+            candidate_geom = candidate.geometry
 
             candidate_nodes = [
                 Point(candidate_geom.coords[0]),
@@ -75,7 +71,8 @@ def find_replaced_reaches(
             ]
 
             if any(
-                current_upstream_node.distance(node) < tolerance
+                current_upstream_node.distance(node)
+                < tolerance
                 for node in candidate_nodes
             ):
                 next_reach = candidate
@@ -148,6 +145,34 @@ def save_boundary_reaches(
         )
 
     return output_file
+    
+def build_metadata_json(
+    upstream_reach,
+    downstream_reach,
+    replaced_reach_ids,
+    replacement_id,
+):
+    return {
+        "replacement_id": int(replacement_id),
+        "upstream_reach_id": int(upstream_reach["reach_id"]),
+        "downstream_reach_id": int(downstream_reach["reach_id"]),
+        "replaced_reach_ids": [
+            int(rid)
+            for rid in replaced_reach_ids
+        ],
+    }
+
+
+def build_obstruction_metadata(
+    obstruction_id,
+    impacted_reach_ids,
+):
+    return {
+        "obstruction_id": obstruction_id,
+        "impacted_reach_ids": sorted(
+            impacted_reach_ids
+        ),
+    }
 
 
 def add_new_reaches_to_json(
