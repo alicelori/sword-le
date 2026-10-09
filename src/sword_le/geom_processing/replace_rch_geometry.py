@@ -111,6 +111,38 @@ def replace_reach_geometry(
         segments,
     )
 
+    utm_crs = gpd.GeoDataFrame(
+        geometry=segments,
+        crs="EPSG:4326",
+    ).estimate_utm_crs()
+
+    segments = [
+        geom_build.reproject_geometry(
+            seg,
+            "EPSG:4326",
+            utm_crs
+        )
+        for seg in segments
+    ]
+
+    segments = [
+        geom_build.resample_line(
+            line,
+            30
+        )
+        for line in segments
+    ]
+
+    segments = [
+        geom_build.reproject_geometry(
+            seg,
+            utm_crs,
+            "EPSG:4326"
+        )
+        for seg in segments
+    ]
+
+
     existing_reach_ids = set(
         sword_gdf["reach_id"]
         .dropna()
