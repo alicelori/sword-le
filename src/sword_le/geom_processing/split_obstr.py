@@ -23,6 +23,7 @@ import pandas as pd
 import argparse
 from pathlib import Path
 import json
+from pyproj import Transformer
 
 import sword_le.geom_tool.obs_function as obs
 import sword_le.geom_tool.save_metadata as save_metadata
@@ -196,11 +197,30 @@ def split_on_obstructions(
             )
         )
 
+        transformer = Transformer.from_crs(
+            reaches_gdf.crs,
+            "EPSG:4326",
+            always_xy=True,
+        )
+
+        upstream_point = transformer.transform(
+            *reach.geometry.coords[-1]
+        )
+
+        downstream_point = transformer.transform(
+            *reach.geometry.coords[0]
+        )
         obstruction_metadata[
             "replaced_reaches"
         ].append(
             {
                 "old_reach_id": reach_id,
+                "upstream_point": list(
+                    upstream_point
+                ),
+                "downstream_point": list(
+                    downstream_point
+                ),
                 "new_reaches": [
                     r["reach_id"]
                     for r in new_reaches
@@ -223,7 +243,7 @@ def split_on_obstructions(
     split_gdf = gpd.GeoDataFrame(
         output_rows,
         geometry="geometry",
-        crs=reaches_gdf.crs,
+        crs="4326",
     )
 
     return (

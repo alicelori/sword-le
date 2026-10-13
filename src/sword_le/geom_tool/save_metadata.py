@@ -153,15 +153,27 @@ def build_metadata_json(
     replacement_id,
 ):
     return {
-        "replacement_id": int(replacement_id),
-        "upstream_reach_id": int(upstream_reach["reach_id"]),
-        "downstream_reach_id": int(downstream_reach["reach_id"]),
-        "replaced_reach_ids": [
-            int(rid)
-            for rid in replaced_reach_ids
+        "replacement_id": int(
+            replacement_id
+        ),
+        "replaced_reaches": [
+            {
+                "old_reach_id": int(
+                    upstream_reach["reach_id"]
+                ),
+                "upstream_point": list(
+                    upstream_reach.geometry.coords[-1]
+                ),
+                "downstream_point": list(
+                    downstream_reach.geometry.coords[0]
+                ),
+                "replaced_reach_ids": [
+                    int(rid)
+                    for rid in replaced_reach_ids
+                ],
+            }
         ],
     }
-
 
 def build_obstruction_metadata(
     obstruction_id,

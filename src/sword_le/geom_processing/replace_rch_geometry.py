@@ -168,8 +168,9 @@ def replace_reach_geometry(
             ),
         )
     )
-
-    metadata_json["new_reaches"] = [
+    metadata_json[
+        "replaced_reaches"
+    ][0]["new_reaches"] = [
         int(reach["reach_id"])
         for reach in new_reaches
     ]

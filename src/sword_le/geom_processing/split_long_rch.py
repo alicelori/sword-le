@@ -21,6 +21,7 @@ from shapely.ops import substring
 import geopandas as gpd
 from pathlib import Path
 import json 
+from pyproj import Transformer
 import sword_le.geom_tool.generate_id as generate_id 
 
 def split_long_reaches(
@@ -107,11 +108,27 @@ def split_long_reaches(
             )
         )
 
+        transformer = Transformer.from_crs(
+            reaches_gdf.crs,
+            "EPSG:4326",
+            always_xy=True,
+        )
+
+        upstream_point = transformer.transform(
+            *reach.geometry.coords[-1]
+        )
+
+        downstream_point = transformer.transform(
+            *reach.geometry.coords[0]
+        )
+
         long_reach_metadata[
             "replaced_reaches"
         ].append(
             {
                 "old_reach_id": reach_id,
+                "upstream_point": list(upstream_point),
+                "downstream_point": list(downstream_point),
                 "new_reaches": [
                     r["reach_id"]
                     for r in new_reaches
@@ -139,7 +156,7 @@ def split_long_reaches(
     split_gdf = gpd.GeoDataFrame(
         output_rows,
         geometry="geometry",
-        crs=reaches_gdf.crs,
+        crs="4326",
     )
 
     return (
