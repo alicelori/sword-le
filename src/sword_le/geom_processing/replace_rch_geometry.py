@@ -175,6 +175,15 @@ def replace_reach_geometry(
         )
     )
 
+    mean_width = (
+        sword_gdf.loc[
+            sword_gdf["reach_id"].isin(replaced_reach_ids),
+            "max_width",
+        ]
+        .mean()
+    )
+    metadata_json["replaced_reaches"][0]["mean_width"] = float(mean_width)
+
     metadata_json[
         "replaced_reaches"
     ][0]["upstream_reaches"] = (

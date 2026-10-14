@@ -23,28 +23,14 @@ from pathlib import Path
 import json 
 from pyproj import Transformer
 import sword_le.geom_tool.generate_id as generate_id 
+import sword_le.geom_tool.save_metadata as save_metadata
+
 
 def split_long_reaches(
     reaches_gdf: gpd.GeoDataFrame,
-    max_length: float = 30000.0,
+    max_length: float = 10000.0,
     long_reach_id: int = 1,
 ):
-    """
-    Split reaches longer than max_length.
-
-    Parameters
-    ----------
-    reaches_gdf : GeoDataFrame
-
-    max_length : float, optional
-        Maximum allowed reach length in meters.
-
-    Returns
-    -------
-    split_gdf : GeoDataFrame
-
-    long_reach_metadata : dict
-    """
 
     output_rows = []
 
@@ -122,15 +108,44 @@ def split_long_reaches(
             *reach.geometry.coords[0]
         )
 
+        mean_width = float(
+            reaches_gdf.loc[
+                reaches_gdf["reach_id"] == int(reach_id),
+                "width",
+            ].mean()
+        )
+
+        external_upstream, external_downstream = (
+            save_metadata.find_external_connectivity(
+                reaches_gdf,
+                [int(reach_id)],
+            )
+        )
+
         long_reach_metadata[
             "replaced_reaches"
         ].append(
             {
-                "old_reach_id": reach_id,
-                "upstream_point": list(upstream_point),
-                "downstream_point": list(downstream_point),
+                "replaced_reach_ids": [
+                    int(reach_id)
+                ],
+                "upstream_reaches": (
+                    external_upstream
+                ),
+                "downstream_reaches": (
+                    external_downstream
+                ),
+                "width": mean_width,
+                "upstream_point": list(
+                    upstream_point
+                ),
+                "downstream_point": list(
+                    downstream_point
+                ),
                 "new_reaches": [
-                    r["reach_id"]
+                    int(
+                        r["reach_id"]
+                    )
                     for r in new_reaches
                 ],
             }
@@ -151,19 +166,20 @@ def split_long_reaches(
                 segment["reach_id"]
             )
 
-            output_rows.append(row)
+            output_rows.append(
+                row
+            )
 
     split_gdf = gpd.GeoDataFrame(
         output_rows,
         geometry="geometry",
-        crs="4326",
+        crs=reaches_gdf.crs,
     )
 
     return (
         split_gdf,
         long_reach_metadata,
     )
-
 
 def run_split_long_reaches(
     path_sword: str,

@@ -210,11 +210,34 @@ def split_on_obstructions(
         downstream_point = transformer.transform(
             *reach.geometry.coords[0]
         )
+        external_upstream, external_downstream = (
+            save_metadata.find_external_connectivity(
+                reaches_gdf,
+                [int(reach_id)],
+            )
+        )
+
+        mean_width = float(
+            reaches_gdf.loc[
+                reaches_gdf["reach_id"] == int(reach_id),
+                "width",
+            ].mean()
+        )
+
         obstruction_metadata[
             "replaced_reaches"
         ].append(
             {
-                "old_reach_id": reach_id,
+                "replaced_reach_ids": [
+                    int(reach_id)
+                ],
+                "upstream_reaches": (
+                    external_upstream
+                ),
+                "downstream_reaches": (
+                    external_downstream
+                ),
+                "width": mean_width,
                 "upstream_point": list(
                     upstream_point
                 ),
@@ -222,11 +245,14 @@ def split_on_obstructions(
                     downstream_point
                 ),
                 "new_reaches": [
-                    r["reach_id"]
+                    int(
+                        r["reach_id"]
+                    )
                     for r in new_reaches
                 ],
             }
         )
+
 
         for segment in segments_for_id:
 
