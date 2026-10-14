@@ -21,6 +21,8 @@ import json
 from pathlib import Path
 from shapely.geometry import shape
 from shapely.geometry import Point
+import geopandas as gpd
+import pandas as pd
 
 def find_replaced_reaches(
     sword_gdf,
@@ -256,3 +258,73 @@ def add_connectivity_to_json(
             indent=4,
             ensure_ascii=False,
         )
+
+def find_external_connectivity(
+    sword_gdf: gpd.GeoDataFrame,
+    replaced_reach_ids,
+):
+    """
+    Find upstream and downstream reaches
+    connected to the replaced group.
+    """
+
+    replaced_reach_ids = {
+        str(rid)
+        for rid in replaced_reach_ids
+    }
+
+    upstream_reaches = set()
+    downstream_reaches = set()
+
+    subset = sword_gdf[
+        sword_gdf["reach_id"]
+        .astype(str)
+        .isin(replaced_reach_ids)
+    ]
+
+    for _, reach in subset.iterrows():
+
+        upstream_ids = [
+            reach["rch_id_up_1"],
+            reach["rch_id_up_2"],
+            reach["rch_id_up_3"],
+            reach["rch_id_up_4"],
+        ]
+
+        downstream_ids = [
+            reach["rch_id_dn_1"],
+            reach["rch_id_dn_2"],
+            reach["rch_id_dn_3"],
+            reach["rch_id_dn_4"],
+        ]
+
+        for rid in upstream_ids:
+
+            if pd.isna(rid):
+                continue
+
+            rid = int(rid)
+
+            if rid == 0:
+                continue
+
+            if str(rid) not in replaced_reach_ids:
+                upstream_reaches.add(int(rid))
+
+        for rid in downstream_ids:
+
+            if pd.isna(rid):
+                continue
+
+            rid = int(rid)
+
+            if rid == 0:
+                continue
+
+            if str(rid) not in replaced_reach_ids:
+                downstream_reaches.add(int(rid))
+
+    return (
+        sorted(upstream_reaches),
+        sorted(downstream_reaches),
+    )

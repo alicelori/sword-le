@@ -168,6 +168,24 @@ def replace_reach_geometry(
             ),
         )
     )
+    external_upstream, external_downstream = (
+        save_metadata.find_external_connectivity(
+            sword_gdf,
+            replaced_reach_ids,
+        )
+    )
+
+    metadata_json[
+        "replaced_reaches"
+    ][0]["upstream_reaches"] = (
+        external_upstream
+    )
+
+    metadata_json[
+        "replaced_reaches"
+    ][0]["downstream_reaches"] = (
+        external_downstream
+    )
     metadata_json[
         "replaced_reaches"
     ][0]["new_reaches"] = [
