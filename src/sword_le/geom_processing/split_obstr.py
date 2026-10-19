@@ -32,9 +32,11 @@ import sword_le.geom_tool.generate_id as generate_id
 def split_on_obstructions(
     reaches_gdf: gpd.GeoDataFrame,
     obstruction_gdf: gpd.GeoDataFrame,
+    utm_crs: str,
     buffer_distance: float = 10.0,
     cut_distance: float = 200.0,
     obstruction_id: int = 1,
+   
 ):
     """
     Split SWORD reaches around obstruction points.
@@ -217,12 +219,18 @@ def split_on_obstructions(
             )
         )
 
-        mean_width = float(
-            reaches_gdf.loc[
-                reaches_gdf["reach_id"] == int(reach_id),
-                "width",
-            ].mean()
-        )
+        up_width = reaches_gdf.loc[
+            reaches_gdf["reach_id"] == int(external_upstream[0]),
+            "width",
+        ].iloc[0]
+
+        dn_width = reaches_gdf.loc[
+            reaches_gdf["reach_id"] == int(external_downstream[0]),
+            "width",
+        ].iloc[0]
+
+        mean_width = ((up_width + dn_width) / 2) * 1.25
+
 
         obstruction_metadata[
             "replaced_reaches"
@@ -265,12 +273,13 @@ def split_on_obstructions(
             row["reach_id"] = segment["reach_id"]
 
             output_rows.append(row)
-
+   
     split_gdf = gpd.GeoDataFrame(
         output_rows,
         geometry="geometry",
-        crs="4326",
+        crs=utm_crs,
     )
+    split_gdf = split_gdf.to_crs(4326)
 
     return (
         split_gdf,
@@ -318,9 +327,9 @@ def run_split_on_obstructions(
             reaches_gdf=sword_gdf,
             obstruction_gdf=obstruction_gdf,
             obstruction_id=obstruction_id,
+            utm_crs=utm_crs
         )
     )
-
     output_dir = Path(path_output)
     output_dir.mkdir(
         parents=True,

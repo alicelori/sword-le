@@ -28,6 +28,7 @@ import sword_le.geom_tool.save_metadata as save_metadata
 
 def split_long_reaches(
     reaches_gdf: gpd.GeoDataFrame,
+    utm_crs: str,
     max_length: float = 10000.0,
     long_reach_id: int = 1,
 ):
@@ -108,12 +109,7 @@ def split_long_reaches(
             *reach.geometry.coords[0]
         )
 
-        mean_width = float(
-            reaches_gdf.loc[
-                reaches_gdf["reach_id"] == int(reach_id),
-                "width",
-            ].mean()
-        )
+       
 
         external_upstream, external_downstream = (
             save_metadata.find_external_connectivity(
@@ -121,6 +117,17 @@ def split_long_reaches(
                 [int(reach_id)],
             )
         )
+        up_width = reaches_gdf.loc[
+            reaches_gdf["reach_id"] == int(external_upstream[0]),
+            "width",
+        ].iloc[0]
+
+        dn_width = reaches_gdf.loc[
+            reaches_gdf["reach_id"] == int(external_downstream[0]),
+            "width",
+        ].iloc[0]
+
+        mean_width = ((up_width + dn_width) / 2) * 1.25
 
         long_reach_metadata[
             "replaced_reaches"
@@ -173,9 +180,9 @@ def split_long_reaches(
     split_gdf = gpd.GeoDataFrame(
         output_rows,
         geometry="geometry",
-        crs=reaches_gdf.crs,
+        crs=utm_crs,
     )
-
+    split_gdf = split_gdf.to_crs(4326)
     return (
         split_gdf,
         long_reach_metadata,
@@ -206,6 +213,7 @@ def run_split_long_reaches(
             reaches_gdf=sword_gdf,
             max_length=max_length,
             long_reach_id=long_reach_id,
+            utm_crs=utm_crs
         )
     )
 
