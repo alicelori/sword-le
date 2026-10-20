@@ -208,7 +208,12 @@ def replace_reach_geometry(
             final_geometry=segments_for_id,
         )
     )
-
+    for reach_id in external_upstream:
+        sword_gdf_out = rep_build.set_upstream_dist_out_to_zero(
+            sword_gdf_out,
+            int(reach_id),
+        )
+    
     return (
         sword_gdf_out,
         metadata_json,

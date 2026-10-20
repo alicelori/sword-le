@@ -19,7 +19,7 @@
 
 import logging
 from collections import Counter
-
+import pandas as pd
 
 from shapely.geometry import (
     MultiLineString,
@@ -296,3 +296,76 @@ def merge_non_pivot_segments(
         merged,
         pivot_nodes,
     )
+
+def get_upstream_network(
+    reaches_gdf,
+    start_reach_id,
+):
+
+    up_cols = sorted(
+        [
+            col
+            for col in reaches_gdf.columns
+            if col.startswith("rch_id_up_")
+        ]
+    )
+
+    visited = set()
+    to_visit = [int(start_reach_id)]
+
+    while to_visit:
+        reach_id = to_visit.pop()
+
+        if reach_id in visited:
+            continue
+
+        visited.add(reach_id)
+
+        row = reaches_gdf.loc[
+            reaches_gdf["reach_id"] == int(reach_id)
+        ]
+        if row.empty:
+            continue
+
+        for col in up_cols:
+            up_id = row[col].iloc[0]
+
+            # 0 = pas de reach amont
+            if pd.isna(up_id) or up_id == 0:
+                continue
+
+            up_id = int(up_id)
+
+            if up_id not in visited:
+                to_visit.append(up_id)
+
+    return reaches_gdf.loc[
+        reaches_gdf["reach_id"].isin(visited)
+    ].copy()
+ 
+
+def set_upstream_dist_out_to_zero(
+    reaches_gdf,
+    start_reach_id,
+):
+    upstream_gdf = get_upstream_network(
+        reaches_gdf,
+        start_reach_id,
+    )
+    reaches_gdf = reaches_gdf.copy()
+    reaches_gdf.loc[
+        reaches_gdf["reach_id"].isin(
+            upstream_gdf["reach_id"]
+        ),
+        "dist_out",
+    ] = 0
+
+    reaches_gdf.loc[
+            reaches_gdf["reach_id"].isin(
+                upstream_gdf["reach_id"]
+            ),
+            "dist_out_dijkstra",
+        ] = 0
+
+
+    return reaches_gdf
