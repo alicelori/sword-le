@@ -16,10 +16,10 @@ def build_node(
     """
     Create a node feature.
     """
-    reach_type = reach_id[-1]
+    reach_type = str(reach_id)[-1]
 
     return {
-        "node_id": (f"{reach_id[:-1]}{node_order:03d}{reach_type}"),
+        "node_id": (f"{str(reach_id)[:-1]}{node_order:03d}{reach_type}"),
         "reach_id": reach_id,
         "node_order": node_order,
         "geometry": point,
@@ -268,6 +268,7 @@ def run_create_nodes(
         new_nodes_gdf=nodes_gdf,
         metadata_json=metadata_json,
     )
+    final_nodes_gdf['node_id']= final_nodes_gdf['node_id'].astype(int)
 
     output_dir = Path(
         path_output,

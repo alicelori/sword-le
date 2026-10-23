@@ -110,7 +110,7 @@ def replace_reach_geometry(
     segments = rep_build.explode_lines(
         segments,
     )
-
+    
     utm_crs = gpd.GeoDataFrame(
         geometry=segments,
         crs="EPSG:4326",
@@ -214,6 +214,8 @@ def replace_reach_geometry(
             int(reach_id),
         )
     
+    sword_gdf_out["reach_id"] = sword_gdf_out["reach_id"].astype(int)
+  
     return (
         sword_gdf_out,
         metadata_json,

@@ -24,7 +24,7 @@ import json
 from pyproj import Transformer
 import sword_le.geom_tool.generate_id as generate_id 
 import sword_le.geom_tool.save_metadata as save_metadata
-
+import numpy as np
 
 def split_long_reaches(
     reaches_gdf: gpd.GeoDataFrame,
@@ -45,15 +45,15 @@ def split_long_reaches(
         "long_reach_id": long_reach_id,
         "replaced_reaches": [],
     }
+    reaches_gdf = reaches_gdf.to_crs(utm_crs)
 
     for _, reach in reaches_gdf.iterrows():
 
-        reach_id = str(
+        reach_id = int(
             reach["reach_id"]
         )
 
         length = reach.geometry.length
-
         if length <= max_length:
 
             output_rows.append(
@@ -117,17 +117,35 @@ def split_long_reaches(
                 [int(reach_id)],
             )
         )
-        up_width = reaches_gdf.loc[
-            reaches_gdf["reach_id"] == int(external_upstream[0]),
-            "width",
-        ].iloc[0]
+        up_width = np.nan
+        if external_upstream:
+            subset = reaches_gdf.loc[
+                reaches_gdf["reach_id"] == int(external_upstream[0]),
+                "width",
+            ]
+            if not subset.empty:
+                up_width = subset.iloc[0]
 
-        dn_width = reaches_gdf.loc[
-            reaches_gdf["reach_id"] == int(external_downstream[0]),
-            "width",
-        ].iloc[0]
+        dn_width = np.nan
+        if external_downstream:
+            subset = reaches_gdf.loc[
+                reaches_gdf["reach_id"] == int(external_downstream[0]),
+                "width",
+            ]
+            if not subset.empty:
+                dn_width = subset.iloc[0]
 
-        mean_width = ((up_width + dn_width) / 2) * 1.25
+        if np.isnan(up_width) and np.isnan(dn_width):
+            mean_width = np.nan
+
+        elif np.isnan(up_width):
+            mean_width = dn_width
+
+        elif np.isnan(dn_width):
+            mean_width = up_width
+
+        else:
+            mean_width = ((up_width + dn_width) / 2) * 1.25
 
         long_reach_metadata[
             "replaced_reaches"
@@ -176,13 +194,11 @@ def split_long_reaches(
             output_rows.append(
                 row
             )
-
     split_gdf = gpd.GeoDataFrame(
         output_rows,
         geometry="geometry",
-        crs=utm_crs,
+        crs="4326",
     )
-    split_gdf = split_gdf.to_crs(4326)
     return (
         split_gdf,
         long_reach_metadata,

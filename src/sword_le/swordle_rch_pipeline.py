@@ -31,9 +31,9 @@ import sword_le.geom_processing.split_obstr as split_obs
 def process_sword_network(
     path_sword: str,
     path_output: str,
+    max_length,
     path_replacement_csv: str | None = None,
     path_obstruction_csv: str | None = None,
-    max_length: float = 30000.0,
 ):
     """
     Full SWORD processing workflow.
@@ -50,10 +50,6 @@ def process_sword_network(
     )
 
     utm_crs = sword_gdf.estimate_utm_crs()
-
-    sword_gdf = sword_gdf.to_crs(
-        utm_crs,
-    )
 
     metadata = {}
 
@@ -76,10 +72,8 @@ def process_sword_network(
 
             replacement_gdf = gpd.read_file(
                 replacement["path_replacement"]
-            ).to_crs(
-                utm_crs
             )
-
+    
             sword_gdf, current_metadata = (
                 rep_geometry.replace_reach_geometry(
                     sword_gdf=sword_gdf,
@@ -121,11 +115,14 @@ def process_sword_network(
                 utm_crs
             )
         )
-
+        sword_gdf = sword_gdf.to_crs(
+            utm_crs,
+        )
         sword_gdf, obstruction_metadata = (
             split_obs.split_on_obstructions(
                 reaches_gdf=sword_gdf,
                 obstruction_gdf=obstruction_gdf,
+                utm_crs=utm_crs
             )
         )
 
@@ -136,11 +133,12 @@ def process_sword_network(
     #
     # Long reaches
     #
-
+    sword_gdf = sword_gdf.to_crs(utm_crs)
     sword_gdf, long_reach_metadata = (
         split_long.split_long_reaches(
             reaches_gdf=sword_gdf,
             max_length=max_length,
+            utm_crs=utm_crs
         )
     )
 
@@ -214,7 +212,7 @@ def main():
     parser.add_argument(
         "--max_length",
         type=float,
-        default=30000.0,
+        default=20000.0,
         help=(
             "Maximum reach length in meters "
             "before splitting."
@@ -226,13 +224,13 @@ def main():
     process_sword_network(
         path_sword=args.path_sword,
         path_output=args.path_output,
+        max_length=args.max_length,
         path_replacement_csv=(
             args.path_replacement_csv
         ),
         path_obstruction_csv=(
             args.path_obstruction_csv
         ),
-        max_length=args.max_length,
     )
 
 
