@@ -160,7 +160,7 @@ def split_long_reaches(
                 "downstream_reaches": (
                     external_downstream
                 ),
-                "width": mean_width,
+                "mean_width": mean_width,
                 "upstream_point": list(
                     upstream_point
                 ),
@@ -197,8 +197,9 @@ def split_long_reaches(
     split_gdf = gpd.GeoDataFrame(
         output_rows,
         geometry="geometry",
-        crs="4326",
+        crs=utm_crs,
     )
+    split_gdf["reach_id"] = split_gdf["reach_id"].astype(int)
     return (
         split_gdf,
         long_reach_metadata,

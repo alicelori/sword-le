@@ -24,7 +24,7 @@ import argparse
 from pathlib import Path
 import json
 from pyproj import Transformer
-
+import numpy as np
 import sword_le.geom_tool.obs_function as obs
 import sword_le.geom_tool.save_metadata as save_metadata
 import sword_le.geom_tool.generate_id as generate_id 
@@ -218,19 +218,35 @@ def split_on_obstructions(
                 [int(reach_id)],
             )
         )
+        up_width = np.nan
+        if external_upstream:
+            subset = reaches_gdf.loc[
+                reaches_gdf["reach_id"] == int(external_upstream[0]),
+                "width",
+            ]
+            if not subset.empty:
+                up_width = subset.iloc[0]
 
-        up_width = reaches_gdf.loc[
-            reaches_gdf["reach_id"] == int(external_upstream[0]),
-            "width",
-        ].iloc[0]
+        dn_width = np.nan
+        if external_downstream:
+            subset = reaches_gdf.loc[
+                reaches_gdf["reach_id"] == int(external_downstream[0]),
+                "width",
+            ]
+            if not subset.empty:
+                dn_width = subset.iloc[0]
 
-        dn_width = reaches_gdf.loc[
-            reaches_gdf["reach_id"] == int(external_downstream[0]),
-            "width",
-        ].iloc[0]
+        if np.isnan(up_width) and np.isnan(dn_width):
+            mean_width = np.nan
 
-        mean_width = ((up_width + dn_width) / 2) * 1.25
+        elif np.isnan(up_width):
+            mean_width = dn_width
 
+        elif np.isnan(dn_width):
+            mean_width = up_width
+
+        else:
+            mean_width = float(((up_width + dn_width) / 2) * 1.25)
 
         obstruction_metadata[
             "replaced_reaches"
@@ -245,7 +261,7 @@ def split_on_obstructions(
                 "downstream_reaches": (
                     external_downstream
                 ),
-                "width": mean_width,
+                "mean_width": mean_width,
                 "upstream_point": list(
                     upstream_point
                 ),
@@ -273,12 +289,14 @@ def split_on_obstructions(
             row["reach_id"] = segment["reach_id"]
 
             output_rows.append(row)
-   
+    
+    
     split_gdf = gpd.GeoDataFrame(
         output_rows,
         geometry="geometry",
         crs=utm_crs,
     )
+    split_gdf["reach_id"] = split_gdf["reach_id"].astype(int)
     split_gdf = split_gdf.to_crs(4326)
 
     return (
