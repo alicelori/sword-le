@@ -131,7 +131,7 @@ def save_boundary_reaches(
     data = {
         "upstream_reach_id": (upstream_reach["properties"]["reach_id"]),
         "downstream_reach_id": (downstream_reach["properties"]["reach_id"]),
-        "replaced_reach_ids": replaced_reach_ids,
+        "old_reach_id": replaced_reach_ids,
     }
 
     output_file = output_dir / "boundary_reaches.json"
@@ -169,7 +169,7 @@ def build_metadata_json(
                 "downstream_point": list(
                     downstream_reach.geometry.coords[0]
                 ),
-                "replaced_reach_ids": [
+                "old_reach_id": [
                     int(rid)
                     for rid in replaced_reach_ids
                 ],

@@ -151,7 +151,7 @@ def split_long_reaches(
             "replaced_reaches"
         ].append(
             {
-                "replaced_reach_ids": [
+                "old_reach_id": [
                     int(reach_id)
                 ],
                 "upstream_reaches": (
