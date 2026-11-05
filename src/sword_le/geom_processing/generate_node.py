@@ -1,18 +1,39 @@
-import logging
-import geopandas as gpd
-from pathlib import Path
+#!/usr/bin/env python3
+# Copyright (c) 2026 CS GROUP France
+#
+# This file is part of the sword-le project:
+#  https://github.com/csgroup-oss/sword-le
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+#
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import json
+import logging
+from pathlib import Path
+
+import geopandas as gpd
 import pandas as pd
+from shapely.geometry import Point
 
 logger = logging.getLogger("create_nodes")
 
 
 def build_node(
-    reach_id,
-    node_order,
-    point,
-):
+    reach_id: int,
+    node_order: int,
+    point: Point,
+) -> dict:
     """
     Create a node feature.
     """
@@ -27,10 +48,10 @@ def build_node(
 
 
 def create_nodes_on_reach(
-    segments,
-    utm_crs,
-    spacing=200.0,
-):
+    segments: list[dict],
+    utm_crs: str,
+    spacing: float = 200.0,
+) -> gpd.GeoDataFrame:
     rows = []
 
     for segment in segments:
@@ -68,12 +89,11 @@ def create_nodes_on_reach(
         crs=utm_crs,
     )
 
+
 def rebuild_sword_nodes(
     sword_nodes_gdf: gpd.GeoDataFrame,
     new_nodes_gdf: gpd.GeoDataFrame,
-    metadata_json: dict,
-    old_reach_ids: list,
-
+    old_reach_ids: list[int],
 ) -> gpd.GeoDataFrame:
     """
     Remove nodes from replaced reaches and add
@@ -82,9 +102,7 @@ def rebuild_sword_nodes(
 
     # nodes conservées
     kept_nodes = sword_nodes_gdf[
-        ~sword_nodes_gdf["reach_id"]
-        .astype(int)
-        .isin(old_reach_ids)
+        ~sword_nodes_gdf["reach_id"].astype(int).isin(old_reach_ids)
     ].copy()
 
     # ajout des nouvelles
@@ -101,11 +119,12 @@ def rebuild_sword_nodes(
         crs=sword_nodes_gdf.crs,
     )
 
+
 def update_node_metadata(
     metadata_json: dict,
     sword_nodes_gdf: gpd.GeoDataFrame,
     new_nodes_gdf: gpd.GeoDataFrame,
-) -> dict:
+) -> tuple[dict, list[int]]:
     """
     Store removed and added node IDs for each replacement.
     """
@@ -119,52 +138,37 @@ def update_node_metadata(
     ]:
         for item in metadata_json.get(category, []):
             for reach_info in item["replaced_reaches"]:
+                old_reach_ids.extend(int(r) for r in reach_info["old_reach_id"])
+                new_reach_ids.extend(int(r) for r in reach_info["new_reaches"])
 
-                old_reach_ids.extend(
-                    int(r)
-                    for r in reach_info["old_reach_id"]
-                )
-                new_reach_ids.extend(
-                    int(r)
-                    for r in reach_info["new_reaches"]
-                )
-     
-                
     removed_node_ids = (
-        sword_nodes_gdf[
-            sword_nodes_gdf["reach_id"]
-            .astype(int)
-            .isin(old_reach_ids)
-        ]["node_id"]
+        sword_nodes_gdf[sword_nodes_gdf["reach_id"].astype(int).isin(old_reach_ids)][
+            "node_id"
+        ]
         .astype(int)
         .tolist()
     )
 
     added_node_ids = (
-        new_nodes_gdf[
-            new_nodes_gdf["reach_id"]
-            .astype(int)
-            .isin(new_reach_ids)
-        ]["node_id"]
+        new_nodes_gdf[new_nodes_gdf["reach_id"].astype(int).isin(new_reach_ids)][
+            "node_id"
+        ]
         .astype(int)
         .tolist()
     )
 
-    metadata_json[
-        "removed_node_ids"
-    ] = removed_node_ids
+    metadata_json["removed_node_ids"] = removed_node_ids
 
-    metadata_json[
-        "added_node_ids"
-    ] = added_node_ids
+    metadata_json["added_node_ids"] = added_node_ids
 
     return metadata_json, old_reach_ids
+
 
 def create_nodes_from_reaches(
     reaches_gdf: gpd.GeoDataFrame,
     sword_nodes_gdf: gpd.GeoDataFrame,
     metadata_json: dict,
-) -> tuple[gpd.GeoDataFrame, dict]:
+) -> tuple[gpd.GeoDataFrame, dict, list[int]]:
     """
     Create nodes on new reaches and rebuild the full
     SWORD nodes layer.
@@ -179,20 +183,12 @@ def create_nodes_from_reaches(
     ]:
         for operation in metadata_json.get(operation_type, []):
             for reach_info in operation["replaced_reaches"]:
-                reach_ids.extend(
-                    reach_info["new_reaches"]
-                )
+                reach_ids.extend(reach_info["new_reaches"])
 
-    subset = reaches_gdf[
-        reaches_gdf["reach_id"]
-        .astype(int)
-        .isin(reach_ids)
-    ].copy()
+    subset = reaches_gdf[reaches_gdf["reach_id"].astype(int).isin(reach_ids)].copy()
 
     if subset.empty:
-        raise ValueError(
-            "No replacement reaches found in SWORD."
-        )
+        raise ValueError("No replacement reaches found in SWORD.")
 
     original_crs = sword_nodes_gdf.crs
 
@@ -200,9 +196,7 @@ def create_nodes_from_reaches(
 
     subset = subset.to_crs(utm_crs)
 
-    segments = subset[
-        ["reach_id", "geometry"]
-    ].to_dict(
+    segments = subset[["reach_id", "geometry"]].to_dict(
         orient="records",
     )
 
@@ -215,27 +209,22 @@ def create_nodes_from_reaches(
         original_crs,
     )
 
-    metadata_json, old_reach_ids = (
-        update_node_metadata(
-            metadata_json=metadata_json,
-            sword_nodes_gdf=sword_nodes_gdf,
-            new_nodes_gdf=new_nodes_gdf,
-        )
+    metadata_json, old_reach_ids = update_node_metadata(
+        metadata_json=metadata_json,
+        sword_nodes_gdf=sword_nodes_gdf,
+        new_nodes_gdf=new_nodes_gdf,
     )
 
     final_nodes_gdf = rebuild_sword_nodes(
         sword_nodes_gdf=sword_nodes_gdf,
         new_nodes_gdf=new_nodes_gdf,
-        metadata_json=metadata_json,
         old_reach_ids=old_reach_ids,
     )
 
-    final_nodes_gdf["node_id"] = (
-        final_nodes_gdf["node_id"]
-        .astype(int)
-    )
+    final_nodes_gdf["node_id"] = final_nodes_gdf["node_id"].astype(int)
 
     return final_nodes_gdf, metadata_json, reach_ids
+
 
 def run_create_nodes(
     path_sword: str,
@@ -254,17 +243,14 @@ def run_create_nodes(
 
     with open(
         path_metadata,
-        "r",
         encoding="utf-8",
     ) as f:
         metadata_json = json.load(f)
 
-    final_nodes_gdf, metadata_json = (
-        create_nodes_from_reaches(
-            reaches_gdf=reaches_gdf,
-            sword_nodes_gdf=sword_nodes_gdf,
-            metadata_json=metadata_json,
-        )
+    final_nodes_gdf, metadata_json, _ = create_nodes_from_reaches(
+        reaches_gdf=reaches_gdf,
+        sword_nodes_gdf=sword_nodes_gdf,
+        metadata_json=metadata_json,
     )
 
     output_dir = Path(path_output)
@@ -274,20 +260,14 @@ def run_create_nodes(
         exist_ok=True,
     )
 
-    output_file = (
-        output_dir
-        / f"{Path(path_sword).stem}_nodes.gpkg"
-    )
+    output_file = output_dir / f"{Path(path_sword).stem}_nodes.gpkg"
 
     final_nodes_gdf.to_file(
         output_file,
         driver="GPKG",
     )
 
-    metadata_file = (
-        output_dir
-        / Path(path_metadata).name
-    )
+    metadata_file = output_dir / Path(path_metadata).name
 
     with open(
         metadata_file,
@@ -301,6 +281,7 @@ def run_create_nodes(
         )
 
     return final_nodes_gdf
+
 
 def main():
 
@@ -338,6 +319,7 @@ def main():
         path_metadata=args.path_metadata,
         path_output=args.path_output,
     )
+
 
 if __name__ == "__main__":
     main()

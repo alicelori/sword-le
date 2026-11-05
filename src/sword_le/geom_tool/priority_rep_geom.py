@@ -21,10 +21,11 @@ import geopandas as gpd
 import pandas as pd
 import sword_le.geom_tool.reach_intersection as rch_int
 
+
 def build_replacement_priority(
     sword_gdf: gpd.GeoDataFrame,
     replacement_csv: str,
-):
+) -> list[dict]:
     """
     Build replacement execution order based on
     upstream dist_out.
@@ -46,62 +47,36 @@ def build_replacement_priority(
         upstream to downstream.
     """
 
-    replacement_df = pd.read_csv(
-        replacement_csv
-    )
+    replacement_df = pd.read_csv(replacement_csv)
 
     replacements = []
 
     for _, row in replacement_df.iterrows():
+        replacement_gdf = gpd.read_file(row["path_replacement"])
 
-        replacement_gdf = gpd.read_file(
-            row["path_replacement"]
-        )
+        if replacement_gdf.crs != sword_gdf.crs:
+            replacement_gdf = replacement_gdf.to_crs(sword_gdf.crs)
 
-        if (
-            replacement_gdf.crs
-            != sword_gdf.crs
-        ):
-            replacement_gdf = (
-                replacement_gdf.to_crs(
-                    sword_gdf.crs
-                )
-            )
-
-        intersected_reaches = (
-            rch_int.find_intersected_reaches(
-                sword_gdf,
-                replacement_gdf,
-            )
+        intersected_reaches = rch_int.find_intersected_reaches(
+            sword_gdf,
+            replacement_gdf,
         )
 
         if intersected_reaches.empty:
-
             raise ValueError(
-                "No intersected reaches found for "
-                f"{row['path_replacement']}"
+                f"No intersected reaches found for {row['path_replacement']}"
             )
 
-        upstream_reach, _ = (
-            rch_int.find_upstream_downstream_reaches(
-                intersected_reaches,
-            )
+        upstream_reach, _ = rch_int.find_upstream_downstream_reaches(
+            intersected_reaches,
         )
 
         replacements.append(
             {
-                "replacement_id": row[
-                    "replacement_id"
-                ],
-                "path_replacement": row[
-                    "path_replacement"
-                ],
-                "reach_id": upstream_reach[
-                    "reach_id"
-                ],
-                "dist_out": upstream_reach[
-                    "dist_out"
-                ],
+                "replacement_id": row["replacement_id"],
+                "path_replacement": row["path_replacement"],
+                "reach_id": upstream_reach["reach_id"],
+                "dist_out": upstream_reach["dist_out"],
             }
         )
 

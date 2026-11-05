@@ -17,32 +17,70 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import geopandas as gpd
 import argparse
-from pathlib import Path
 import json
+from pathlib import Path
 
-import sword_le.geom_tool.generate_id as generate_id 
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+
+import sword_le.geom_tool.generate_id as generate_id
 import sword_le.geom_tool.save_metadata as save_metadata
 import sword_le.geom_tool.reach_intersection as rch_int
 import sword_le.geom_tool.replacement_reconstruction as rep_build
 import sword_le.geom_tool.final_geometry_reconstruction as geom_build
+
 
 def replace_reach_geometry(
     sword_gdf: gpd.GeoDataFrame,
     replacement_gdf: gpd.GeoDataFrame,
     replacement_id: int = 0,
 ) -> tuple[gpd.GeoDataFrame, dict]:
+    """
+    Replace a section of the SWORD river network with a user-provided
+    centerline geometry.
+
+    The workflow identifies the reaches intersected by the replacement
+    geometry, determines the upstream and downstream connection points,
+    and removes the affected reaches from the network. The replacement
+    centerline is trimmed to the intersection points and merged with the
+    preserved upstream and downstream river sections to create a continuous
+    corrected river path.
+
+    The corrected path is then split into reaches, resampled, assigned
+    new reach identifiers, and integrated back into the SWORD network.
+    Metadata describing the replaced reaches, network connectivity,
+    generated reach identifiers, and representative width information
+    are also produced.
+
+    Parameters
+    ----------
+    sword_gdf : gpd.GeoDataFrame
+        Input SWORD river network.
+    replacement_gdf : gpd.GeoDataFrame
+        Geometry used to replace a section of the original network.
+    replacement_id : int, default=0
+        Identifier associated with the replacement operation.
+
+    Returns
+    -------
+    tuple[gpd.GeoDataFrame, dict]
+        A tuple containing:
+
+        - The updated SWORD network with the replacement geometry applied.
+        - A metadata dictionary describing the replacement operation,
+          including affected reaches, connectivity information, generated
+          reach identifiers, and summary attributes.
+    """
 
     intersected_reaches = rch_int.find_intersected_reaches(
         sword_gdf,
         replacement_gdf,
     )
 
-    upstream_reach, downstream_reach = (
-        rch_int.find_upstream_downstream_reaches(
-            intersected_reaches,
-        )
+    upstream_reach, downstream_reach = rch_int.find_upstream_downstream_reaches(
+        intersected_reaches,
     )
 
     replaced_reach_ids = save_metadata.find_replaced_reaches(
@@ -101,53 +139,30 @@ def replace_reach_geometry(
         tolerance=1e-5,
     )
 
-    segments, pivot_nodes = (
-        rep_build.merge_non_pivot_segments(
-            segments,
-        )
+    segments, pivot_nodes = rep_build.merge_non_pivot_segments(
+        segments,
     )
 
     segments = rep_build.explode_lines(
         segments,
     )
-    
+
     utm_crs = gpd.GeoDataFrame(
         geometry=segments,
         crs="EPSG:4326",
     ).estimate_utm_crs()
 
     segments = [
-        geom_build.reproject_geometry(
-            seg,
-            "EPSG:4326",
-            utm_crs
-        )
-        for seg in segments
+        geom_build.reproject_geometry(seg, "EPSG:4326", utm_crs) for seg in segments
     ]
+
+    segments = [geom_build.resample_line(line, 30) for line in segments]
 
     segments = [
-        geom_build.resample_line(
-            line,
-            30
-        )
-        for line in segments
+        geom_build.reproject_geometry(seg, utm_crs, "EPSG:4326") for seg in segments
     ]
 
-    segments = [
-        geom_build.reproject_geometry(
-            seg,
-            utm_crs,
-            "EPSG:4326"
-        )
-        for seg in segments
-    ]
-
-
-    existing_reach_ids = set(
-        sword_gdf["reach_id"]
-        .dropna()
-        .astype(str)
-    )
+    existing_reach_ids = set(sword_gdf["reach_id"].dropna().astype(str))
 
     segments_for_id = [
         {
@@ -157,65 +172,43 @@ def replace_reach_geometry(
         for segment in segments
     ]
 
-    segments_for_id, new_reaches = (
-        generate_id.generate_reaches_id(
-            upstream_reach_id=(
-                upstream_reach["reach_id"]
-            ),
-            segments=segments_for_id,
-            existing_reach_ids=(
-                existing_reach_ids
-            ),
-        )
+    segments_for_id, new_reaches = generate_id.generate_reaches_id(
+        upstream_reach_id=(upstream_reach["reach_id"]),
+        segments=segments_for_id,
+        existing_reach_ids=(existing_reach_ids),
     )
-    external_upstream, external_downstream = (
-        save_metadata.find_external_connectivity(
-            sword_gdf,
-            replaced_reach_ids,
-        )
+    external_upstream, external_downstream = save_metadata.find_external_connectivity(
+        sword_gdf,
+        replaced_reach_ids,
     )
 
-    upstream_width = float(upstream_reach["width"])
-    downstream_width = float(downstream_reach["width"])
+    upstream_width = pd.to_numeric(upstream_reach["width"], errors="coerce")
+    downstream_width = pd.to_numeric(downstream_reach["width"], errors="coerce")
 
-    mean_width = (
-        (upstream_width + downstream_width) / 2
-    ) * 1.25
+    mean_width = np.nanmean([upstream_width, downstream_width]) * 1.25
     metadata_json["replaced_reaches"][0]["mean_width"] = float(mean_width)
 
-    metadata_json[
-        "replaced_reaches"
-    ][0]["upstream_reaches"] = (
-        external_upstream
-    )
+    metadata_json["replaced_reaches"][0]["upstream_reaches"] = external_upstream
 
-    metadata_json[
-        "replaced_reaches"
-    ][0]["downstream_reaches"] = (
-        external_downstream
-    )
-    metadata_json[
-        "replaced_reaches"
-    ][0]["new_reaches"] = [
-        int(reach["reach_id"])
-        for reach in new_reaches
+    metadata_json["replaced_reaches"][0]["downstream_reaches"] = external_downstream
+
+    metadata_json["replaced_reaches"][0]["new_reaches"] = [
+        int(reach["reach_id"]) for reach in new_reaches
     ]
 
-    sword_gdf_out = (
-        geom_build.rebuild_sword_network(
-            sword_gdf=sword_gdf,
-            replaced_ids=replaced_reach_ids,
-            final_geometry=segments_for_id,
-        )
+    sword_gdf_out = geom_build.rebuild_sword_network(
+        sword_gdf=sword_gdf,
+        replaced_ids=replaced_reach_ids,
+        final_geometry=segments_for_id,
     )
     for reach_id in external_upstream:
         sword_gdf_out = rep_build.set_upstream_dist_out_to_zero(
             sword_gdf_out,
             int(reach_id),
         )
-    
+
     sword_gdf_out["reach_id"] = sword_gdf_out["reach_id"].astype(int)
-  
+
     return (
         sword_gdf_out,
         metadata_json,
@@ -227,9 +220,9 @@ def run_replace_reach_geometry(
     path_replacement: str,
     path_output: str,
     replacement_id: int = 1,
-):
+) -> tuple[gpd.GeoDataFrame, dict]:
     """
-    Run reach replacement workflow from file paths.
+    Run reach replacement workflow.
     """
 
     sword_gdf = gpd.read_file(
@@ -240,12 +233,10 @@ def run_replace_reach_geometry(
         path_replacement,
     )
 
-    sword_gdf_out, metadata_json = (
-        replace_reach_geometry(
-            sword_gdf=sword_gdf,
-            replacement_gdf=replacement_gdf,
-            replacement_id=replacement_id,
-        )
+    sword_gdf_out, metadata_json = replace_reach_geometry(
+        sword_gdf=sword_gdf,
+        replacement_gdf=replacement_gdf,
+        replacement_id=replacement_id,
     )
 
     output_dir = Path(path_output)
@@ -275,7 +266,6 @@ def run_replace_reach_geometry(
         sword_gdf_out,
         metadata_json,
     )
-
 
 
 def main():

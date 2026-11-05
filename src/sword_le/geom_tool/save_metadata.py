@@ -19,17 +19,28 @@
 
 import json
 from pathlib import Path
-from shapely.geometry import shape
-from shapely.geometry import Point
+
 import geopandas as gpd
 import pandas as pd
+from shapely.geometry import Point
+
 
 def find_replaced_reaches(
-    sword_gdf,
-    upstream_reach,
-    downstream_reach,
-    tolerance=1e-5,
-):
+    sword_gdf: gpd.GeoDataFrame,
+    upstream_reach: pd.Series,
+    downstream_reach: pd.Series,
+    tolerance: float = 1e-5,
+) -> list:
+    """
+    Identify all reaches belonging to the river
+    section replaced by a geometry modification.
+
+    The search starts from the downstream boundary
+    reach and follows connected reaches until the
+    upstream boundary reach is reached. All visited
+    reach identifiers are considered part of the
+    replaced section.
+    """
     upstream_id = upstream_reach["reach_id"]
 
     current = downstream_reach
@@ -38,7 +49,6 @@ def find_replaced_reaches(
     visited = set()
 
     while True:
-
         current_id = current["reach_id"]
 
         if current_id in visited:
@@ -52,14 +62,11 @@ def find_replaced_reaches(
 
         current_geom = current.geometry
 
-        current_upstream_node = Point(
-            current_geom.coords[-1]
-        )
+        current_upstream_node = Point(current_geom.coords[-1])
 
         next_reach = None
 
         for _, candidate in sword_gdf.iterrows():
-
             candidate_id = candidate["reach_id"]
 
             if candidate_id in visited:
@@ -73,8 +80,7 @@ def find_replaced_reaches(
             ]
 
             if any(
-                current_upstream_node.distance(node)
-                < tolerance
+                current_upstream_node.distance(node) < tolerance
                 for node in candidate_nodes
             ):
                 next_reach = candidate
@@ -89,11 +95,11 @@ def find_replaced_reaches(
 
 
 def save_boundary_reaches(
-    upstream_reach,
-    downstream_reach,
-    output_dir,
-    replaced_reach_ids=None,
-):
+    upstream_reach: dict,
+    downstream_reach: dict,
+    output_dir: str | Path,
+    replaced_reach_ids: list[int] | None = None,
+) -> Path:
     """
     Save upstream/downstream reach IDs and
     replaced reach IDs to a JSON file.
@@ -147,52 +153,40 @@ def save_boundary_reaches(
         )
 
     return output_file
-    
+
+
 def build_metadata_json(
-    upstream_reach,
-    downstream_reach,
-    replaced_reach_ids,
-    replacement_id,
-):
+    upstream_reach: pd.Series,
+    downstream_reach: pd.Series,
+    replaced_reach_ids: list[int],
+    replacement_id: int,
+) -> dict:
     return {
-        "replacement_id": int(
-            replacement_id
-        ),
+        "replacement_id": int(replacement_id),
         "replaced_reaches": [
             {
-                "old_reach_id": int(
-                    upstream_reach["reach_id"]
-                ),
-                "upstream_point": list(
-                    upstream_reach.geometry.coords[-1]
-                ),
-                "downstream_point": list(
-                    downstream_reach.geometry.coords[0]
-                ),
-                "old_reach_id": [
-                    int(rid)
-                    for rid in replaced_reach_ids
-                ],
+                "upstream_point": list(upstream_reach.geometry.coords[-1]),
+                "downstream_point": list(downstream_reach.geometry.coords[0]),
+                "old_reach_id": [int(rid) for rid in replaced_reach_ids],
             }
         ],
     }
 
+
 def build_obstruction_metadata(
-    obstruction_id,
-    impacted_reach_ids,
-):
+    obstruction_id: int,
+    impacted_reach_ids: list[int],
+) -> dict:
     return {
         "obstruction_id": obstruction_id,
-        "impacted_reach_ids": sorted(
-            impacted_reach_ids
-        ),
+        "impacted_reach_ids": sorted(impacted_reach_ids),
     }
 
 
 def add_new_reaches_to_json(
-    json_file,
-    replacement_reaches,
-):
+    json_file: str | Path,
+    replacement_reaches: list[dict],
+) -> None:
     """
     Add newly generated reaches to the
     metadata JSON.
@@ -226,9 +220,13 @@ def add_new_reaches_to_json(
 
 
 def add_new_nodes_to_json(
-    json_file,
-    nodes_gdf,
-):
+    json_file: str | Path,
+    nodes_gdf: gpd.GeoDataFrame,
+) -> None:
+    """
+    Add newly generated node information to a
+    metadata JSON file.
+    """
     json_file = Path(json_file)
 
     with json_file.open("r", encoding="utf-8") as f:
@@ -241,9 +239,13 @@ def add_new_nodes_to_json(
 
 
 def add_connectivity_to_json(
-    json_file,
-    connectivity,
-):
+    json_file: str | Path,
+    connectivity: dict,
+) -> None:
+    """
+    Add connectivity information to a metadata
+    JSON file.
+    """
     json_file = Path(json_file)
 
     with json_file.open("r", encoding="utf-8") as f:
@@ -259,31 +261,24 @@ def add_connectivity_to_json(
             ensure_ascii=False,
         )
 
+
 def find_external_connectivity(
     sword_gdf: gpd.GeoDataFrame,
-    replaced_reach_ids,
-):
+    replaced_reach_ids: list[int],
+) -> tuple[list[int], list[int]]:
     """
     Find upstream and downstream reaches
     connected to the replaced group.
     """
 
-    replaced_reach_ids = {
-        str(rid)
-        for rid in replaced_reach_ids
-    }
+    replaced_reach_ids = {str(rid) for rid in replaced_reach_ids}
 
     upstream_reaches = set()
     downstream_reaches = set()
 
-    subset = sword_gdf[
-        sword_gdf["reach_id"]
-        .astype(str)
-        .isin(replaced_reach_ids)
-    ]
+    subset = sword_gdf[sword_gdf["reach_id"].astype(str).isin(replaced_reach_ids)]
 
     for _, reach in subset.iterrows():
-
         upstream_ids = [
             reach["rch_id_up_1"],
             reach["rch_id_up_2"],
@@ -299,7 +294,6 @@ def find_external_connectivity(
         ]
 
         for rid in upstream_ids:
-
             if pd.isna(rid):
                 continue
 
@@ -312,7 +306,6 @@ def find_external_connectivity(
                 upstream_reaches.add(int(rid))
 
         for rid in downstream_ids:
-
             if pd.isna(rid):
                 continue
 

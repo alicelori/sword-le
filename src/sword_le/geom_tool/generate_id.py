@@ -17,38 +17,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 def generate_reaches_id(
-    upstream_reach_id,
-    segments,
-    existing_reach_ids,
-    start_counter=9000,
-):
+    upstream_reach_id: str | int,
+    segments: list[dict],
+    existing_reach_ids: set[str],
+    start_counter: int = 9000,
+) -> tuple[list[dict], list[dict]]:
     """
     Generate unique reach IDs.
-
-    Parameters
-    ----------
-    upstream_reach_id : str | int
-        Reach used as reference for the ID prefix.
-
-    segments : list[dict]
-        Segment dictionaries containing:
-        - geometry
-        - has_obstruction
-
-    existing_reach_ids : set[str]
-        Existing reach IDs.
-
-    start_counter : int, optional
-        Initial counter value.
-
-    Returns
-    -------
-    tuple
-        (
-            updated_segments,
-            new_reaches,
-        )
     """
 
     upstream_reach_id = str(upstream_reach_id)
@@ -60,7 +37,6 @@ def generate_reaches_id(
     new_reaches = []
 
     for segment in segments:
-
         suffix = (
             4
             if segment.get(
@@ -71,10 +47,7 @@ def generate_reaches_id(
         )
 
         while True:
-
-            reach_id = (
-                f"{prefix}{counter}{suffix}"
-            )
+            reach_id = f"{prefix}{counter}{suffix}"
 
             if reach_id not in existing_reach_ids:
                 break
@@ -83,9 +56,7 @@ def generate_reaches_id(
 
         segment["reach_id"] = reach_id
 
-        existing_reach_ids.add(
-            reach_id
-        )
+        existing_reach_ids.add(reach_id)
 
         new_reaches.append(
             {

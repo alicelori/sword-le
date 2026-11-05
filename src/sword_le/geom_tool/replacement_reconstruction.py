@@ -19,19 +19,26 @@
 
 import logging
 from collections import Counter
+
+import geopandas as gpd
 import pandas as pd
 
 from shapely.geometry import (
+    LineString,
     MultiLineString,
     MultiPoint,
-    LineString,
     Point,
 )
 from shapely.ops import linemerge, split
 
 
-def explode_lines(obj):
-
+def explode_lines(
+    obj,
+) -> list:
+    """
+    Convert LineString and MultiLineString geometries
+    into a flat list of LineString objects.
+    """
     if isinstance(obj, list):
         exploded = []
 
@@ -70,10 +77,10 @@ def explode_lines(obj):
 
 
 def build_corrected_network(
-    upstream_part,
-    replacement_part,
-    downstream_part,
-):
+    upstream_part: LineString,
+    replacement_part: LineString | MultiLineString,
+    downstream_part: LineString,
+) -> LineString | MultiLineString:
     """
     Assemble the corrected network from the
     upstream reach, replacement network and
@@ -112,9 +119,9 @@ def build_corrected_network(
 
 
 def find_connection_points(
-    geom,
-    tolerance=1e-5,
-):
+    geom: LineString | MultiLineString,
+    tolerance: float = 1e-5,
+) -> list[Point]:
     """
     Find network connection nodes.
 
@@ -164,9 +171,9 @@ def find_connection_points(
 
 
 def split_at_nodes(
-    multiline,
-    tolerance=1e-5,
-):
+    multiline: LineString | MultiLineString,
+    tolerance: float = 1e-5,
+) -> list[LineString]:
     """
     Split a network at all detected connection
     points.
@@ -223,9 +230,12 @@ def split_at_nodes(
 
 
 def merge_non_pivot_segments(
-    segments,
-    precision=6,
-):
+    segments: list[LineString],
+    precision: int = 6,
+) -> tuple[
+    LineString | MultiLineString,
+    list[tuple[float, float]],
+]:
     """
     Identify pivot nodes and merge connected
     segments.
@@ -297,17 +307,22 @@ def merge_non_pivot_segments(
         pivot_nodes,
     )
 
-def get_upstream_network(
-    reaches_gdf,
-    start_reach_id,
-):
 
+def get_upstream_network(
+    reaches_gdf: gpd.GeoDataFrame,
+    start_reach_id: int,
+) -> gpd.GeoDataFrame:
+    """
+
+    Retrieve all reaches located upstream of
+    a reference reach.
+
+    The network is traversed recursively using
+    the rch_id_up_* connectivity attributes until
+    all contributing upstream reaches are found.
+    """
     up_cols = sorted(
-        [
-            col
-            for col in reaches_gdf.columns
-            if col.startswith("rch_id_up_")
-        ]
+        [col for col in reaches_gdf.columns if col.startswith("rch_id_up_")]
     )
 
     visited = set()
@@ -321,9 +336,7 @@ def get_upstream_network(
 
         visited.add(reach_id)
 
-        row = reaches_gdf.loc[
-            reaches_gdf["reach_id"] == int(reach_id)
-        ]
+        row = reaches_gdf.loc[reaches_gdf["reach_id"] == int(reach_id)]
         if row.empty:
             continue
 
@@ -339,33 +352,30 @@ def get_upstream_network(
             if up_id not in visited:
                 to_visit.append(up_id)
 
-    return reaches_gdf.loc[
-        reaches_gdf["reach_id"].isin(visited)
-    ].copy()
- 
+    return reaches_gdf.loc[reaches_gdf["reach_id"].isin(visited)].copy()
+
 
 def set_upstream_dist_out_to_zero(
-    reaches_gdf,
-    start_reach_id,
-):
+    reaches_gdf: gpd.GeoDataFrame,
+    start_reach_id: int,
+) -> gpd.GeoDataFrame:
+    """
+    Reset dist_out metrics for all reaches
+    upstream of a reference reach.
+    """
     upstream_gdf = get_upstream_network(
         reaches_gdf,
         start_reach_id,
     )
     reaches_gdf = reaches_gdf.copy()
     reaches_gdf.loc[
-        reaches_gdf["reach_id"].isin(
-            upstream_gdf["reach_id"]
-        ),
+        reaches_gdf["reach_id"].isin(upstream_gdf["reach_id"]),
         "dist_out",
     ] = 0
 
     reaches_gdf.loc[
-            reaches_gdf["reach_id"].isin(
-                upstream_gdf["reach_id"]
-            ),
-            "dist_out_dijkstra",
-        ] = 0
-
+        reaches_gdf["reach_id"].isin(upstream_gdf["reach_id"]),
+        "dist_out_dijkstra",
+    ] = 0
 
     return reaches_gdf

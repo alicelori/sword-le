@@ -17,17 +17,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from shapely.ops import substring
-import geopandas as gpd
-import pandas as pd
 import argparse
-from pathlib import Path
 import json
-from pyproj import Transformer
+from pathlib import Path
+
+import geopandas as gpd
 import numpy as np
+import pandas as pd
+from pyproj import Transformer
+
 import sword_le.geom_tool.obs_function as obs
 import sword_le.geom_tool.save_metadata as save_metadata
-import sword_le.geom_tool.generate_id as generate_id 
+import sword_le.geom_tool.generate_id as generate_id
+
 
 def split_on_obstructions(
     reaches_gdf: gpd.GeoDataFrame,
@@ -36,8 +38,7 @@ def split_on_obstructions(
     buffer_distance: float = 10.0,
     cut_distance: float = 200.0,
     obstruction_id: int = 1,
-   
-):
+) -> tuple[gpd.GeoDataFrame, dict]:
     """
     Split SWORD reaches around obstruction points.
 
@@ -104,22 +105,14 @@ def split_on_obstructions(
     """
 
     if reaches_gdf.crs != obstruction_gdf.crs:
-        raise ValueError(
-            "reaches_gdf and obstruction_gdf must use the same CRS."
-        )
+        raise ValueError("reaches_gdf and obstruction_gdf must use the same CRS.")
 
     if reaches_gdf.crs.is_geographic:
-        raise ValueError(
-            "Projected CRS required (e.g. UTM)."
-        )
+        raise ValueError("Projected CRS required (e.g. UTM).")
 
     output_rows = []
 
-    existing_reach_ids = set(
-        reaches_gdf["reach_id"]
-        .dropna()
-        .astype(str)
-    )
+    existing_reach_ids = set(reaches_gdf["reach_id"].dropna().astype(str))
 
     obstruction_metadata = {
         "obstruction_id": obstruction_id,
@@ -127,14 +120,10 @@ def split_on_obstructions(
     }
 
     for _, reach in reaches_gdf.iterrows():
-
         reach_id = str(reach["reach_id"])
 
         if reach_id[-1] != "1":
-
-            output_rows.append(
-                reach.to_dict()
-            )
+            output_rows.append(reach.to_dict())
 
             continue
 
@@ -154,23 +143,15 @@ def split_on_obstructions(
         split_occurred = False
 
         for obstruction in nearby_obstructions.geometry:
-
             next_segments = []
 
             for seg_data in current_segments:
-
                 seg = seg_data["geometry"]
 
-                obstruction_buffer = obstruction.buffer(
-                    buffer_distance
-                )
+                obstruction_buffer = obstruction.buffer(buffer_distance)
 
-                if not seg.intersects(
-                    obstruction_buffer
-                ):
-                    next_segments.append(
-                        seg_data
-                    )
+                if not seg.intersects(obstruction_buffer):
+                    next_segments.append(seg_data)
                     continue
 
                 split_occurred = True
@@ -186,17 +167,13 @@ def split_on_obstructions(
             current_segments = next_segments
 
         if not split_occurred:
-            output_rows.append(
-                reach.to_dict()
-            )
+            output_rows.append(reach.to_dict())
             continue
 
-        segments_for_id, new_reaches = (
-            generate_id.generate_reaches_id(
-                upstream_reach_id=reach_id,
-                segments=current_segments,
-                existing_reach_ids=existing_reach_ids,
-            )
+        segments_for_id, new_reaches = generate_id.generate_reaches_id(
+            upstream_reach_id=reach_id,
+            segments=current_segments,
+            existing_reach_ids=existing_reach_ids,
         )
 
         transformer = Transformer.from_crs(
@@ -205,13 +182,9 @@ def split_on_obstructions(
             always_xy=True,
         )
 
-        upstream_point = transformer.transform(
-            *reach.geometry.coords[-1]
-        )
+        upstream_point = transformer.transform(*reach.geometry.coords[-1])
 
-        downstream_point = transformer.transform(
-            *reach.geometry.coords[0]
-        )
+        downstream_point = transformer.transform(*reach.geometry.coords[0])
         external_upstream, external_downstream = (
             save_metadata.find_external_connectivity(
                 reaches_gdf,
@@ -225,7 +198,10 @@ def split_on_obstructions(
                 "width",
             ]
             if not subset.empty:
-                up_width = subset.iloc[0]
+                up_width = pd.to_numeric(
+                    subset.iloc[0],
+                    errors="coerce",
+                )
 
         dn_width = np.nan
         if external_downstream:
@@ -234,63 +210,42 @@ def split_on_obstructions(
                 "width",
             ]
             if not subset.empty:
-                dn_width = subset.iloc[0]
+                dn_width = pd.to_numeric(
+                    subset.iloc[0],
+                    errors="coerce",
+                )
 
-        if np.isnan(up_width) and np.isnan(dn_width):
+        if pd.isna(up_width) and pd.isna(dn_width):
             mean_width = np.nan
 
-        elif np.isnan(up_width):
-            mean_width = dn_width
+        elif pd.isna(up_width):
+            mean_width = float(dn_width)
 
-        elif np.isnan(dn_width):
-            mean_width = up_width
+        elif pd.isna(dn_width):
+            mean_width = float(up_width)
 
         else:
             mean_width = float(((up_width + dn_width) / 2) * 1.25)
-
-        obstruction_metadata[
-            "replaced_reaches"
-        ].append(
+        obstruction_metadata["replaced_reaches"].append(
             {
-                "old_reach_id": [
-                    int(reach_id)
-                ],
-                "upstream_reaches": (
-                    external_upstream
-                ),
-                "downstream_reaches": (
-                    external_downstream
-                ),
+                "old_reach_id": [int(reach_id)],
+                "upstream_reaches": (external_upstream),
+                "downstream_reaches": (external_downstream),
                 "mean_width": mean_width,
-                "upstream_point": list(
-                    upstream_point
-                ),
-                "downstream_point": list(
-                    downstream_point
-                ),
-                "new_reaches": [
-                    int(
-                        r["reach_id"]
-                    )
-                    for r in new_reaches
-                ],
+                "upstream_point": list(upstream_point),
+                "downstream_point": list(downstream_point),
+                "new_reaches": [int(r["reach_id"]) for r in new_reaches],
             }
         )
 
-
         for segment in segments_for_id:
-
-            row = {
-                col: None
-                for col in reaches_gdf.columns
-            }
+            row = {col: None for col in reaches_gdf.columns}
 
             row["geometry"] = segment["geometry"]
             row["reach_id"] = segment["reach_id"]
 
             output_rows.append(row)
-    
-    
+
     split_gdf = gpd.GeoDataFrame(
         output_rows,
         geometry="geometry",
@@ -310,9 +265,9 @@ def run_split_on_obstructions(
     path_obstruction_csv: str,
     path_output: str,
     obstruction_id: int = 1,
-):
+) -> tuple[gpd.GeoDataFrame, dict]:
     """
-    Run obstruction splitting workflow from file paths.
+    Run obstruction splitting workflow.
     """
 
     sword_gdf = gpd.read_file(
@@ -340,13 +295,11 @@ def run_split_on_obstructions(
         utm_crs,
     )
 
-    sword_gdf_out, metadata_json = (
-        split_on_obstructions(
-            reaches_gdf=sword_gdf,
-            obstruction_gdf=obstruction_gdf,
-            obstruction_id=obstruction_id,
-            utm_crs=utm_crs
-        )
+    sword_gdf_out, metadata_json = split_on_obstructions(
+        reaches_gdf=sword_gdf,
+        obstruction_gdf=obstruction_gdf,
+        obstruction_id=obstruction_id,
+        utm_crs=utm_crs,
     )
     output_dir = Path(path_output)
     output_dir.mkdir(
@@ -374,6 +327,7 @@ def run_split_on_obstructions(
         sword_gdf_out,
         metadata_json,
     )
+
 
 def main():
 

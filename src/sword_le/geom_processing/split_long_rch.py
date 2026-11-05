@@ -17,29 +17,66 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from shapely.ops import substring
-import geopandas as gpd
+import argparse
+import json
 from pathlib import Path
-import json 
-from pyproj import Transformer
-import sword_le.geom_tool.generate_id as generate_id 
-import sword_le.geom_tool.save_metadata as save_metadata
+
+import geopandas as gpd
 import numpy as np
+from pyproj import Transformer
+from shapely.ops import substring
+
+import sword_le.geom_tool.generate_id as generate_id
+import sword_le.geom_tool.save_metadata as save_metadata
+
 
 def split_long_reaches(
     reaches_gdf: gpd.GeoDataFrame,
     utm_crs: str,
-    max_length: float = 10000.0,
+    max_length: float = 30000.0,
     long_reach_id: int = 1,
-):
+) -> tuple[gpd.GeoDataFrame, dict]:
+    """
+    Split SWORD reaches whose length exceeds a specified threshold.
 
+    The workflow identifies reaches longer than the maximum allowed
+    length and divides each of them into two shorter reaches at the
+    midpoint of their geometry. New reach identifiers are generated
+    for the resulting segments while preserving network connectivity
+    information.
+
+    Metadata describing the original reach, surrounding connectivity,
+    generated reach identifiers, representative width information, and
+    split locations are produced for each modified reach.
+
+    Parameters
+    ----------
+    reaches_gdf : gpd.GeoDataFrame
+        Input SWORD river network.
+    utm_crs : str
+        Projected coordinate reference system used for length
+        calculations and geometric operations.
+    max_length : float, default=30000.0
+        Maximum allowed reach length in meters. Reaches exceeding
+        this value are split.
+    long_reach_id : int, default=1
+        Identifier associated with the long-reach splitting operation.
+
+    Returns
+    -------
+    tuple[gpd.GeoDataFrame, dict]
+        A tuple containing:
+
+        - The updated river network with long reaches replaced by
+          newly generated reaches.
+        - A metadata dictionary describing all performed split
+          operations, including original reach identifiers,
+          connectivity information, split locations, generated
+          reach identifiers, and summary attributes.
+    """
     output_rows = []
 
-    existing_reach_ids = set(
-        reaches_gdf["reach_id"]
-        .dropna()
-        .astype(str)
-    )
+    existing_reach_ids = set(reaches_gdf["reach_id"].dropna().astype(str))
 
     long_reach_metadata = {
         "long_reach_id": long_reach_id,
@@ -48,17 +85,11 @@ def split_long_reaches(
     reaches_gdf = reaches_gdf.to_crs(utm_crs)
 
     for _, reach in reaches_gdf.iterrows():
-
-        reach_id = int(
-            reach["reach_id"]
-        )
+        reach_id = int(reach["reach_id"])
 
         length = reach.geometry.length
         if length <= max_length:
-
-            output_rows.append(
-                reach.to_dict()
-            )
+            output_rows.append(reach.to_dict())
 
             continue
 
@@ -87,12 +118,10 @@ def split_long_reaches(
             },
         ]
 
-        segments, new_reaches = (
-            generate_id.generate_reaches_id(
-                upstream_reach_id=reach_id,
-                segments=segments,
-                existing_reach_ids=existing_reach_ids,
-            )
+        segments, new_reaches = generate_id.generate_reaches_id(
+            upstream_reach_id=reach_id,
+            segments=segments,
+            existing_reach_ids=existing_reach_ids,
         )
 
         transformer = Transformer.from_crs(
@@ -101,15 +130,9 @@ def split_long_reaches(
             always_xy=True,
         )
 
-        upstream_point = transformer.transform(
-            *reach.geometry.coords[-1]
-        )
+        upstream_point = transformer.transform(*reach.geometry.coords[-1])
 
-        downstream_point = transformer.transform(
-            *reach.geometry.coords[0]
-        )
-
-       
+        downstream_point = transformer.transform(*reach.geometry.coords[0])
 
         external_upstream, external_downstream = (
             save_metadata.find_external_connectivity(
@@ -147,53 +170,26 @@ def split_long_reaches(
         else:
             mean_width = ((up_width + dn_width) / 2) * 1.25
 
-        long_reach_metadata[
-            "replaced_reaches"
-        ].append(
+        long_reach_metadata["replaced_reaches"].append(
             {
-                "old_reach_id": [
-                    int(reach_id)
-                ],
-                "upstream_reaches": (
-                    external_upstream
-                ),
-                "downstream_reaches": (
-                    external_downstream
-                ),
+                "old_reach_id": [int(reach_id)],
+                "upstream_reaches": (external_upstream),
+                "downstream_reaches": (external_downstream),
                 "mean_width": mean_width,
-                "upstream_point": list(
-                    upstream_point
-                ),
-                "downstream_point": list(
-                    downstream_point
-                ),
-                "new_reaches": [
-                    int(
-                        r["reach_id"]
-                    )
-                    for r in new_reaches
-                ],
+                "upstream_point": list(upstream_point),
+                "downstream_point": list(downstream_point),
+                "new_reaches": [int(r["reach_id"]) for r in new_reaches],
             }
         )
 
         for segment in segments:
+            row = {col: None for col in reaches_gdf.columns}
 
-            row = {
-                col: None
-                for col in reaches_gdf.columns
-            }
+            row["geometry"] = segment["geometry"]
 
-            row["geometry"] = (
-                segment["geometry"]
-            )
+            row["reach_id"] = segment["reach_id"]
 
-            row["reach_id"] = (
-                segment["reach_id"]
-            )
-
-            output_rows.append(
-                row
-            )
+            output_rows.append(row)
     split_gdf = gpd.GeoDataFrame(
         output_rows,
         geometry="geometry",
@@ -205,14 +201,15 @@ def split_long_reaches(
         long_reach_metadata,
     )
 
+
 def run_split_long_reaches(
     path_sword: str,
     path_output: str,
     max_length: float = 30000.0,
     long_reach_id: int = 1,
-):
+) -> tuple[gpd.GeoDataFrame, dict]:
     """
-    Run long reach splitting workflow from file paths.
+    Run long reach splitting workflow.
     """
 
     sword_gdf = gpd.read_file(
@@ -225,13 +222,11 @@ def run_split_long_reaches(
         utm_crs,
     )
 
-    sword_gdf_out, metadata_json = (
-        split_long_reaches(
-            reaches_gdf=sword_gdf,
-            max_length=max_length,
-            long_reach_id=long_reach_id,
-            utm_crs=utm_crs
-        )
+    sword_gdf_out, metadata_json = split_long_reaches(
+        reaches_gdf=sword_gdf,
+        max_length=max_length,
+        long_reach_id=long_reach_id,
+        utm_crs=utm_crs,
     )
 
     output_dir = Path(path_output)
@@ -261,8 +256,6 @@ def run_split_long_reaches(
         sword_gdf_out,
         metadata_json,
     )
-
-import argparse
 
 
 def main():

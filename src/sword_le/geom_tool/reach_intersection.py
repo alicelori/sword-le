@@ -18,20 +18,22 @@
 # limitations under the License.
 
 import logging
+import geopandas as gpd
 from shapely.geometry import (
     MultiLineString,
+    LineString,
     Point,
     shape,
 )
 from shapely.ops import snap, split
+
 import sword_le.geom_tool.replacement_reconstruction as rep
 
-import logging
 
 def find_intersected_reaches(
-    sword_gdf,
-    replacement_gdf,
-):
+    sword_gdf: gpd.GeoDataFrame,
+    replacement_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
     """
     Find all SWORD reaches intersecting the
     replacement network.
@@ -65,8 +67,9 @@ def find_intersected_reaches(
 
     return intersected_reaches
 
+
 def find_upstream_downstream_reaches(
-    intersected_reaches,
+    intersected_reaches: gpd.GeoDataFrame,
 ):
     """
     Identify upstream and downstream reaches
@@ -75,13 +78,9 @@ def find_upstream_downstream_reaches(
 
     logging.info("Finding upstream and downstream reaches")
 
-    upstream_reach = intersected_reaches.loc[
-        intersected_reaches["dist_out"].idxmax()
-    ]
+    upstream_reach = intersected_reaches.loc[intersected_reaches["dist_out"].idxmax()]
 
-    downstream_reach = intersected_reaches.loc[
-        intersected_reaches["dist_out"].idxmin()
-    ]
+    downstream_reach = intersected_reaches.loc[intersected_reaches["dist_out"].idxmin()]
 
     logging.info("Selected upstream and downstream reaches")
 
@@ -90,10 +89,11 @@ def find_upstream_downstream_reaches(
         downstream_reach,
     )
 
+
 def find_upstream_intersection_point(
     upstream_reach,
-    replacement_gdf,
-):
+    replacement_gdf: gpd.GeoDataFrame,
+) -> Point:
     """
     Find the upstream-most intersection point
     between the upstream reach and the
@@ -107,12 +107,9 @@ def find_upstream_intersection_point(
     points = []
 
     for _, replacement_feature in replacement_gdf.iterrows():
-
         replacement_geom = replacement_feature.geometry
 
-        inter = reach_geom.intersection(
-            replacement_geom
-        )
+        inter = reach_geom.intersection(replacement_geom)
 
         if inter.is_empty:
             continue
@@ -124,9 +121,7 @@ def find_upstream_intersection_point(
             points.extend(inter.geoms)
 
     if not points:
-        raise ValueError(
-            "No upstream intersection point found."
-        )
+        raise ValueError("No upstream intersection point found.")
 
     point = max(
         points,
@@ -141,22 +136,24 @@ def find_upstream_intersection_point(
 
     return point
 
+
 def find_downstream_intersection_point(
     downstream_reach,
-    replacement_gdf,
-):
-
+    replacement_gdf: gpd.GeoDataFrame,
+) -> Point:
+    """
+    Find the downstream-most intersection point
+    between the downstream reach and the
+    replacement network.
+    """
     reach_geom = downstream_reach.geometry
 
     points = []
 
     for _, replacement_feature in replacement_gdf.iterrows():
-
         replacement_geom = replacement_feature.geometry
 
-        inter = reach_geom.intersection(
-            replacement_geom
-        )
+        inter = reach_geom.intersection(replacement_geom)
 
         if inter.is_empty:
             continue
@@ -168,19 +165,18 @@ def find_downstream_intersection_point(
             points.extend(inter.geoms)
 
     if not points:
-        raise ValueError(
-            "No downstream intersection point found."
-        )
+        raise ValueError("No downstream intersection point found.")
 
     return min(
         points,
         key=lambda p: reach_geom.project(p),
     )
 
+
 def keep_upstream_part(
     reach,
-    intersection_point,
-):
+    intersection_point: Point,
+) -> LineString:
     """
     Split a reach at the intersection point and
     keep the upstream portion.
@@ -233,8 +229,8 @@ def keep_upstream_part(
 
 def keep_downstream_part(
     reach,
-    intersection_point,
-):
+    intersection_point: Point,
+) -> LineString:
     """
     Split a reach at the intersection point and
     keep the downstream portion.
@@ -288,10 +284,10 @@ def keep_downstream_part(
 
 
 def trim_replacement_between_points(
-    replacement_gdf,
-    upstream_point,
-    downstream_point,
-):
+    replacement_gdf: gpd.GeoDataFrame,
+    upstream_point: Point,
+    downstream_point: Point,
+) -> MultiLineString:
     """
     Trim the replacement network between the upstream
     and downstream intersection points.
@@ -323,12 +319,9 @@ def trim_replacement_between_points(
     lines = []
 
     for _, feature in replacement_gdf.iterrows():
-
         geom = feature.geometry
 
-        lines.extend(
-            rep.explode_lines(geom)
-        )
+        lines.extend(rep.explode_lines(geom))
 
     output_lines = []
 
@@ -405,12 +398,20 @@ def trim_replacement_between_points(
 
 
 def insert_pivot_points(
-    replacement_geom,
-    upstream_point,
-    downstream_point,
-    tolerance=1e-5,
-):
+    replacement_geom: MultiLineString,
+    upstream_point: Point,
+    downstream_point: Point,
+    tolerance: float = 1e-5,
+) -> MultiLineString:
+    """
+    Insert pivot points into the replacement geometry.
 
+    The replacement network is snapped to the upstream
+    and downstream intersection points, then split at
+    these locations to ensure that the pivot points are
+    explicitly represented as geometry vertices and
+    segment boundaries.
+    """
     lines = rep.explode_lines(replacement_geom)
 
     result_lines = []
