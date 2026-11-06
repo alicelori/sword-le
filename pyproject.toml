@@ -1,3 +1,6 @@
+[build-system]
+requires = ["setuptools>=80", "setuptools-scm[simple]>=9.2"]
+
 [project]
 name = "sword-le"
 version = "0.1.0"
@@ -26,11 +29,9 @@ dev =[
     "pre-commit",
     "pylint",
 ]
-packages = ["sword-le"]
 
-[project.scripts]
-"sword-le" = "sword_le.swordle_prod_upgrade:main"
+[tool.setuptools]
+package-dir = {"" = "src"}
 
-[build-system]
-requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
-build-backend = "setuptools.build_meta"
+[tool.setuptools.packages.find]
+where = ["src"]
